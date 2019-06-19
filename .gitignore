@@ -1,0 +1,13 @@
+*.pdf
+multimodel/*.png
+multimodel/*/*.png
+multimodel/*/*/*.png
+multimodel/*/*/*/*.png
+my_try/*/*/*/*.png
+my_try/*/*/*.png
+my_try/*/*.png
+my_try/*.png
+*.csv
+*/*.csv
+*/*/*.csv
+*/*/*/*.csv
