@@ -4,6 +4,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["IMP_NUM_THREADS"] = "1"
 
 import datetime
+from datetime import datetime as dt
 import time
 import math
 import pandas as pd
@@ -25,6 +26,20 @@ from sklearn.pipeline import make_pipeline
 from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import RandomForestRegressor as RFR 
 from sklearn.svm import SVR
+
+
+def holiday(date):
+    '''
+      Returns True if date is a holiday according to NYSE, else False
+    '''
+    holidays = [dt(2019,1,1), dt(2019,1,21), dt(2019,2,18), dt(2019,4,19), dt(2019,5,27),
+                dt(2019,7,4), dt(2019,9,2), dt(2019,11,28), dt(2019,12,25), 
+                dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
+                dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25),
+                dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
+                dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25)]
+    return date in holidays
+
 
 def add_combs(best, combs):
     for comb in combs:
@@ -106,7 +121,7 @@ def risk():
     plt.show()
 
 
-def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
+def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=False):
     # Want to separate 1 percent of the data to forecast
     days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -117,7 +132,7 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
         day = today.day
 
     # NEED TO SELECT SO THAT forecast_out TRADING DAYS HAVE HAPPENED (WEEKEND AND HOLIDAY)
-    days = 0
+    trading_days = 0
     for i in range(2*forecast_out):
 
         trial_day = day-i if((day-i) > 0) else \
@@ -125,10 +140,11 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
         trial_month = month-1 if((day-i) <= 0) else month
         #print(trial_month, trial_day)
 
-        if(datetime.datetime(2019, trial_month, trial_day).weekday()<5):
-            days += 1
+        date = datetime.datetime(year, trial_month, trial_day)
+        if(date.weekday()<5 and not(holiday(date))): 
+            trading_days += 1
             #print("WAS WEEKDAY")
-            if(days == forecast_out):
+            if(trading_days == forecast_out):
                 pred_month = trial_month
                 pred_day = trial_day
                 break
@@ -139,7 +155,13 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
 
     # For prediction
     start = datetime.datetime(2015, 1, 1)
-    end = datetime.datetime(2019, pred_month, pred_day-2)
+    try: 
+        end = datetime.datetime(year, pred_month, pred_day-2)
+    except ValueError:
+        if(pred_month == 1):
+            end = datetime.datetime(year-1, 12, pred_day-2+days[11])
+        else:
+            end = datetime.datetime(year, pred_month-1, pred_day-2+days[pred_month-2])
     df = web.DataReader(stock, 'yahoo', start, end)
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
@@ -266,9 +288,17 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
                                     'rfr_forecast', 'svr_forecast']].mean(axis=1)
 
     as_list = dfreg.index.tolist()
-    as_list[-forecast_out:] = new_df.index.tolist()
+    # I THINK THIS IS FIXED
+    #print(as_list[-forecast_out-5:])
+    #for asd in as_list[-forecast_out:]:
+    #    print(asd)
+    #print()
+    #for asd in new_df.index.tolist()[:forecast_out]:
+    #    print(asd)
+    #exit(1)
+    as_list[-forecast_out:] = new_df.index.tolist()[:forecast_out]
     dfreg.index = as_list
-    dfreg[-forecast_out:].index = new_df.index.tolist()
+    dfreg[-forecast_out:].index = new_df.index.tolist()[:forecast_out]
 
     #
     # Trying to do all combinations
@@ -790,10 +820,6 @@ def forecast_out_sweep(stocks, forecasts, plot=False):
     return good_stocks
 
 
-def forecasting(good_stocks):
-    pass
-
-
 if __name__ == '__main__':
     today = datetime.datetime.now()
     try:
@@ -845,6 +871,8 @@ if __name__ == '__main__':
     #penny_stocks = penny_stocks[:3]
     stocks.extend(penny_stocks)
 
+    simulate(penny_stocks)
+    exit(1)
 
     forecasts = [2,3,4,5,6,7,8,9,10]
     #forecasts = [4,5,6,7,8,9]
@@ -874,4 +902,5 @@ if __name__ == '__main__':
     print(stock_pred[stock_pred['Good Put']])
     name="/home/dr/Projects/learn_stocks/towards_data_science/pred_plots/{}_{}/predictions.csv"
     stock_pred.to_csv(name.format(today.day, today.month))
+
 

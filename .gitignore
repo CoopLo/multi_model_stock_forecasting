@@ -11,3 +11,4 @@ my_try/*.png
 */*.csv
 */*/*.csv
 */*/*/*.csv
+*.swp
