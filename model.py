@@ -26,12 +26,14 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import RandomForestRegressor as RFR 
 from sklearn.svm import SVR
 
-def add_comb(best, comb):
-    if(not(comb in best)):
-        best[comb] = 1
-    else:
-        best[comb] += 1
+def add_combs(best, combs):
+    for comb in combs:
+        if(not(comb in best)):
+            best[comb] = 1
+        else:
+            best[comb] += 1
     return best
+
 
 def fitting(model, X_train, y_train, fits, i):
     try:
@@ -303,21 +305,20 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
     highest_corr = 0
     best_comb = ''
     num_combs = 0
-    for j in range(2,9):
+    correlations = []
+    good_combinations = []
+    for j in range(1,9):
         for comb in combinations(forecasts, j):
-            #print("COMBINATION: {}".format(comb))
             num_combs += 1
-            comb_dat = dfreg[[*list(combinations(forecasts, j))[0]]].mean(axis=1).tail(
-                                      forecast_out)
-            #print(comb_dat)
-            if(corr(comb_dat, actual)[0] > highest_corr):
-                #print("New highest correlation: {}".format(corr(comb_dat, actual)[0]))
-                #print(comb)
-                highest_corr = corr(comb_dat, actual)[0]
-                best_comb = comb
+            comb_dat = dfreg[[*list(comb)]].mean(axis=1).tail(forecast_out)
+            new_correlation = corr(comb_dat, actual)[0]
+            correlations.append(new_correlation)
+            if(new_correlation > 0.4):
+                good_combinations.append(comb)
 
-    #print("TOTAL NUMBER OF COMBINATIONS: {}".format(num_combs))
-    #exit(1)
+            if(new_correlation > highest_corr):
+                highest_corr = new_correlation
+                best_comb = comb
 
     reg_dat = dfreg['reg_forecast'].tail(forecast_out)
     reg_corr = corr(reg_dat, actual)
@@ -366,8 +367,9 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, plot=False):
         plt.savefig("./test_plots/{1}_{2}/{0}_{1}_{2}_{3}".format(stock, month, day,
                                                                   forecast_out))
         plt.close()
+
     return (reg_corr[0], poly2_corr[0], poly3_corr[0], poly4_corr[0], poly5_corr[0],\
-           knn_corr[0], bayr_corr[0], rfr_corr[0], mean_corr[0], svr_corr[0]), best_comb
+           knn_corr[0], bayr_corr[0], rfr_corr[0], mean_corr[0], svr_corr[0]), good_combinations
     
 
 def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False):
@@ -692,6 +694,106 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False):
     #print("{} {}".format(stock, string))
     return fit[0]
 
+
+def forecast_out_sweep(stocks, forecasts, plot=False):
+    # Averages To look for
+    best_average = 0
+    best_forecast = 0
+    method_means = [0]*10
+    stock_corr_averages = {ps: 0 for ps in penny_stocks}
+    best = {}
+
+    for fo in forecasts:
+        start = time.time()
+        print("\n\nFORECASTING {} DAYS OUT\n\n".format(fo))
+        correlations = np.zeros((len(penny_stocks), 10))
+        cor = []
+
+        # Run test for forecast_out
+        for idx, ps in enumerate(penny_stocks):
+            print(ps)
+            try:
+                vals, good_combs = test_ml(ps, forecast_out=fo, plot=plot, day=18, month=6)
+            except:
+                print("HAD AN ERROR")
+                vals = np.zeros(10)
+                good_combs = {}
+
+            cor.append((ps, vals))
+            correlations[idx] = vals
+
+            # Add combination to dict
+            best = add_combs(best, good_combs)
+
+        # Compute various correlation values
+        correlations = correlations[~np.isnan(correlations).any(axis=1)]
+        method_means += np.mean(correlations, axis=0)
+        print("INDIVIDUAL CORRELATION MEAN")
+        print(np.mean(correlations, axis=0))
+        print("ALL CORRELATION MEAN")
+        print(np.mean(correlations))
+
+
+        # Calculate stock-level means and find best one for this forecast_out
+        best_mean = 0
+        best_stock = ''
+        for c in cor:
+            #print(c[0], np.mean(c[1]))
+            stock_corr_averages[c[0]] += np.mean(c[1])/len(forecasts)
+            if(np.mean(c[1]) > best_mean):
+                best_mean = np.mean(c[1])
+                best_stock = c[0]
+
+        # Check if new best overall forecast-level correlation mean
+        if(np.mean(correlations) > best_average):
+            best_average = np.mean(correlations)
+            best_forecast = fo
+
+        print("\nBEST FROM FORECASTING {} DAYS OUT: {} {}".format(fo, best_mean, best_stock))
+        print("TESTING {} FORECAST LENGTH TOOK {} SECONDS".format(fo, time.time()-start))
+
+    print("\n\nBEST FORECAST: {} WITH CORRELATION: {}".format(best_forecast, best_average))
+
+    # Method list in order
+    method = ['Linear Regression', 'Poly2 Regression', 'Poly3 Regression', 'Poly4 Regression',
+              'Poly5 Regression', 'K Nearest Neighbors', 'Bayesian Ridge',
+              'Multi Layer Perceptron', 'Random Forest Regression', 'Support Vector Regression']
+    print("\nAVERAGE METHOD CORRELATION MEANS")#: {}".format(method_means/len(penny_stocks)))
+    for k, m in enumerate(method_means):
+        print(method[k], m)
+        
+    print("\nSTOCK AVERAGE CORRELATION OVER DAYS:")
+    for key, val in stock_corr_averages.items():
+        print(key, val)
+
+    d = {k : v for k,v in filter(lambda t: t[1]>0.15, stock_corr_averages.items())}
+
+    good_stocks = list(d.keys())
+    print("STOCKS WITH HIGH CORRELATION: {}".format(good_stocks))
+    print("TOP 10 BEST MEAN COMBINATIONS:")#.format(best))
+    for i in range(10):
+        best_combination = max(best, key=best.get)
+        print(best_combination, best[best_combination])
+        del best[best_combination]
+    print("Histogram of best values:")
+    fig, ax = plt.subplots()
+    ax.hist(best.values(), bins=20)
+    plt.show()
+    fig.savefig("./hist_of_number_of_good_corrs.png")
+    exit(1)
+    #import operator
+    #print(sorted(best.iteritems(), key=operator.itemgetter(1)))
+    #for key, val in best.items():
+        #if(val > len(stocks)/2):
+        #    print(key, val)
+
+    return good_stocks
+
+
+def forecasting(good_stocks):
+    pass
+
+
 if __name__ == '__main__':
     today = datetime.datetime.now()
     try:
@@ -740,80 +842,16 @@ if __name__ == '__main__':
                     'CYTX', 'TGB', 'LGCY', 'IGC', 'ZNGA', 'TOPS', 'TROV',
                     'JAGX', 'CEI', 'AKR', 'BPMX', 'MYSZ','GNC', 'CHK', 'BLNK', 'SLNO', 'ZIOP']
     penny_stocks = np.unique(penny_stocks)
-    #penny_stocks = penny_stocks[:4]
+    #penny_stocks = penny_stocks[:3]
     stocks.extend(penny_stocks)
 
-    # Method list in order
-    method = ['Linear Regression', 'Poly2 Regression', 'Poly3 Regression', 'Poly4 Regression',
-              'Poly5 Regression', 'K Nearest Neighbors', 'Bayesian Ridge',
-              'Multi Layer Perceptron', 'Random Forest Regression', 'Support Vector Regression']
 
-    # Averages To look for
-    best_average = 0
-    best_forecast = 0
-    method_means = [0]*10
-    stock_corr_averages = {ps: 0 for ps in penny_stocks}
-
-    #for fo in [2,3,4,5,6,7,8,9,10]:
     forecasts = [2,3,4,5,6,7,8,9,10]
-    #forecasts = [7]
-    best = {}
-    for fo in forecasts:
-        start = time.time()
-        print("\n\nFORECASTING {} DAYS OUT\n\n".format(fo))
-        correlations = np.zeros((len(penny_stocks), 10))
-        cor = []
+    #forecasts = [4,5,6,7,8,9]
+    #forecasts = [3,4]
+    good_stocks = forecast_out_sweep(penny_stocks, forecasts, plot=True)
+    print(good_stocks)
 
-        # Run test for forecast_out
-        for idx, ps in enumerate(penny_stocks):
-            print(ps)
-            vals, best_comb = test_ml(ps, forecast_out=fo, plot=True, month=6, day=18)
-            cor.append((ps, vals))
-            correlations[idx] = vals
-
-            # Add combination to dict
-            best = add_comb(best, best_comb)
-
-        # Compute various correlation values
-        correlations = correlations[~np.isnan(correlations).any(axis=1)]
-        method_means += np.mean(correlations, axis=0)
-        print("INDIVIDUAL CORRELATION MEAN")
-        print(np.mean(correlations, axis=0))
-        print("ALL CORRELATION MEAN")
-        print(np.mean(correlations))
-
-
-        # Calculate stock-level means and find best one for this forecast_out
-        best_mean = 0
-        best_stock = ''
-        for c in cor:
-            #print(c[0], np.mean(c[1]))
-            stock_corr_averages[c[0]] += np.mean(c[1])/len(forecasts)
-            if(np.mean(c[1]) > best_mean):
-                best_mean = np.mean(c[1])
-                best_stock = c[0]
-
-        # Check if new best overall forecast-level correlation mean
-        if(np.mean(correlations) > best_average):
-            best_average = np.mean(correlations)
-            best_forecast = fo
-
-        print("\nBEST FROM FORECASTING {} DAYS OUT: {} {}".format(fo, best_mean, best_stock))
-        print("TESTING {} FORECAST LENGTH TOOK {} SECONDS".format(fo, time.time()-start))
-
-    print("\n\nBEST FORECAST: {} WITH CORRELATION: {}".format(best_forecast, best_average))
-
-    print("\nAVERAGE METHOD CORRELATION MEANS")#: {}".format(method_means/len(penny_stocks)))
-    for k, m in enumerate(method_means):
-        print(method[k], m)
-        
-    print("\nSTOCK AVERAGE CORRELATION OVER DAYS:")
-    for key, val in stock_corr_averages.items():
-        print(key, val)
-    d = {k : v for k,v in filter(lambda t: t[1]>0.15, stock_corr_averages.items())}
-    good_stocks = list(d.keys())
-    print("STOCKS WITH HIGH CORRELATION: {}".format(good_stocks))
-    print("BEST MEAN COMBINATIONS: {}".format(best))
     exit(1)
 
     start = time.time()
