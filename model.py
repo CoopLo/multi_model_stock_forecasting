@@ -35,11 +35,29 @@ def holiday(date):
     holidays = [dt(2019,1,1), dt(2019,1,21), dt(2019,2,18), dt(2019,4,19), dt(2019,5,27),
                 dt(2019,7,4), dt(2019,9,2), dt(2019,11,28), dt(2019,12,25), 
                 dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
-                dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25),
+                dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25), dt(2018,12,5),
                 dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
                 dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25),
                 dt(2016,12,15)]
     return date in holidays
+
+
+def get_trading_days(years):
+    trading_days = []
+    days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    for year in years:
+        for i in range(1, 13):
+            for j in range(1, 32):
+
+                if(j>days[i-1]):
+                    continue
+
+                date = dt(year, i, j)
+                if(date.weekday() < 5 and not(holiday(date))):
+                    trading_days.append(date)
+
+
+    return np.array(trading_days)
 
 
 def add_combs(best, combs):
@@ -123,47 +141,41 @@ def risk():
 
 
 def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=False):
+    # Assume input day is valid trading day
     # Want to separate 1 percent of the data to forecast
-    days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-
     # Today info
     if(month==None or day==None):
         today = datetime.datetime.now()
         month = today.month
         day = today.day
 
-    # NEED TO SELECT SO THAT forecast_out TRADING DAYS HAVE HAPPENED (WEEKEND AND HOLIDAY)
-    # I THINK I KNOW THE ERROR BUT DONT WANT TO FIX IT
-    # Basically it doesn't quite line up because the first df only goes back forecast_out days
-    # but the other goes back forecast_out trading days. Hence, mismatch.
-    trading_days = 0
-    start_date = dt(year, month, day)
-    shift = 0 if start_date.weekday() < 6 else start_date.weeday()-5
-    for i in range(2*forecast_out):
+    end_date = dt(year, month, day)
+    trading_days = get_trading_days([2017,2018,2019])
+    #print(end_date, end_date in trading_days, np.where(end_date == trading_days)[0][0])
 
-        trial_day = day-i-shift if((day-i-shift) > 0) else \
-                    days[month-2]+day-i-shift
+    end_idx = np.where(end_date==trading_days)[0][0]
 
-        trial_month = 12 if((day-i-shift) <= 0 and month==1) else\
-                      month-1 if((day-i-shift) <= 0) else month
+    end = trading_days[end_idx-forecast_out]
+    new_start = trading_days[end_idx-forecast_out]
+    new_end = trading_days[end_idx]
+    #for d in trading_days[end_idx-forecast_out-2:end_idx+1]:
+    #    print(d)
+    #print(end_date, end, new_start, new_end)
+    #exit(1)
 
-        trial_year = year-1 if((day-i) <= 0 and month==1) else year
+    #print(start_date)
+    #print(trading_days)
+    #exit(1)
 
-        date = datetime.datetime(trial_year, trial_month, trial_day)
-        if(date.weekday()<5 and not(holiday(date))): 
-            trading_days += 1
-            if(trading_days == forecast_out):
-                pred_month = trial_month
-                pred_day = trial_day
-                pred_year = trial_year
-                break
 
     # For prediction
     start = datetime.datetime(2015, 1, 1)
-    end = datetime.datetime(pred_year, pred_month, pred_day)
-    print("END: {}".format(end))
+    #print("END: \t{}".format(end))
 
+    #print(end)
     df = web.DataReader(stock, 'yahoo', start, end)
+    df = df[df.index <= end]
+    #print(df.tail(forecast_out))
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
     dfreg['PCT_change'] = (df['Close'] - df['Open']) / df['Open'] * 100.0
@@ -172,14 +184,14 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
     dfreg['Adj Close'] = dfreg['EMA']
 
     # For validation
-    #print(pred_year, pred_month, pred_day)
-    #print(year, month, day)
-    new_start = datetime.datetime(pred_year, pred_month, pred_day)
-    new_end = datetime.datetime(year, month, day)
-    print("NEW START: {}".format(new_start))
-    print("NEW END: {}".format(new_end))
+    #print("NEW START: \t{}".format(new_start))
+    #print("NEW END: \t{}".format(new_end))
     #print("VALIDATION START: {} END: {}\n".format(new_start, new_end))
     new_df = web.DataReader(stock, 'yahoo', new_start, new_end)
+    #print(new_end)
+    new_df = new_df[new_df.index <= new_end]
+    #print(new_df)
+    #exit(1)
     new_dfreg = new_df.loc[:,['Adj Close', 'Volume']]
     new_dfreg['HL_PCT'] = (new_df['High'] - new_df['Low']) / new_df['Close'] * 100.0
     new_dfreg['PCT_change'] = (new_df['Close'] - new_df['Open']) / new_df['Open'] * 100.0
@@ -296,18 +308,19 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
     as_list = dfreg.index.tolist()
     # I THINK THIS IS FIXED
     #print(as_list[-forecast_out-5:])
-    for asd in as_list[-forecast_out-5:]:
-        print(asd)
-    print()
-    for asd in new_df.index.tolist()[:forecast_out]:
-        print(asd)
-    as_list[-forecast_out:] = new_df.index.tolist()[:forecast_out]
+    #for asd in as_list[-forecast_out-1:]:
+    #    print(asd)
+    #print()
+    #for asd in new_df.index.tolist():#[:forecast_out]:
+    #    print(asd)
+    as_list[-forecast_out:] = new_df.index.tolist()[1:]
     dfreg.index = as_list
     #for asd in as_list[-forecast_out-5:]:
     #    print(asd)
     dfreg[-forecast_out:].index = new_df.index.tolist()[:forecast_out]
-    print(dfreg.tail(forecast_out+9))
-    exit(1)
+    #print(dfreg.tail(forecast_out+1))
+    #return [None]*10, None
+    #exit(1)
 
     #
     # Trying to do all combinations
@@ -424,11 +437,16 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
         day = today.day+forecast_out if(today.day+forecast_out == days[today.month-1]) else \
               (today.day+forecast_out)%days[today.month-1]
               
+    trading_days = get_trading_days([2017,2018,2019])
+    end_date = dt(year, month, day)
+    end_idx = np.where(end_date==trading_days)[0][0]
+    end = trading_days[end_idx+forecast_out]
 
     # For prediction
     start = datetime.datetime(2015, 1, 1)
     end = datetime.datetime(year, month, day) 
     df = web.DataReader(stock, 'yahoo', start, end)
+    df = df[df.index <= end]
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
     dfreg['PCT_change'] = (df['Close'] - df['Open']) / df['Open'] * 100.0

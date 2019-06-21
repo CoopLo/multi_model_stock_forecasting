@@ -44,7 +44,8 @@ def end_hold_date(forecast_out, day, month, year):
     trial_year = year
     trial_day = day
     trial_month = month
-    for i in range(2*forecast_out):
+    #for i in range(2*forecast_out):
+    while(trading_days <= forecast_out):
         trial_year = year+1 if(trial_day+1 > 31 and trial_month==12) else trial_year
         trial_month = 1 if(trial_day+1 > days[trial_month-1] and trial_month==12) \
                       else trial_month+1 if(trial_day+1 > days[trial_month-1]) \
@@ -92,8 +93,12 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
     print(end_hold)
     while(end_hold.date() < end_date.date()):
 
-        print("START DATE: {}".format(start_date))
-        print("END HOLD DATE: {}".format(end_hold))
+        print("START DATE: \t{}".format(start_date))
+        print("END HOLD DATE: \t{}".format(end_hold))
+        print()
+        #start_date = end_hold
+        #end_hold = end_hold_date(forecast_out, end_hold.day, end_hold.month, end_hold.year)
+        #continue
         
         # To keep track of data
         stock_corr_averages = {s: 0 for s in stocks}
@@ -104,8 +109,14 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         # Test each stock, hold on to relevant data
         print("\nTRAINING")
         for idx, s in enumerate(stocks):
-            vals, good_combs = test_ml(s, forecast_out, year=start_date.year,
-                            month=start_date.month, day=start_date.day)
+            try:
+                vals, good_combs = test_ml(s, forecast_out, year=start_date.year,
+                                month=start_date.month, day=start_date.day)
+            except KeyError:
+                print("SOMETHING WENT WRONG WITH DATE FOR {}".format(s))
+                vals = [0]*10
+                good_combs = {}
+
             cor.append((s, vals))
             correlations[idx] = vals
 
@@ -180,10 +191,11 @@ if __name__ == '__main__':
                     'LIFE', 'YUMA', 'FCEL', 'AMR', 'SNSS', 'PIXY', 'HUSA', 'NAKD',
                     'CYTX', 'TGB', 'LGCY', 'IGC', 'ZNGA', 'TOPS', 'TROV', 'SPXCY',
                     'JAGX', 'CEI', 'AKR', 'BPMX', 'MYSZ','GNC', 'CHK', 'BLNK', 'SLNO', 'ZIOP']
-    penny_stocks = ['SPXCY']
-    #penny_stocks = np.unique(penny_stocks)
+    #penny_stocks = ['SPXCY']
+    penny_stocks = np.unique(penny_stocks)
     #penny_stocks = penny_stocks[:15]
 
     # Initial Date must be on day markets were open
     # ISSUES WHEN YOU HAVE START OR END ON A DAY MARKETS AREN'T OPEN
-    simulate(penny_stocks, 5, 3, 1, 2019)#, 1, 6, 2019)
+    #for i in range(2, 7):
+    simulate(penny_stocks, 5, 1, 2, 2017)#, 1, 6, 2019)
