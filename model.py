@@ -4,12 +4,12 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["IMP_NUM_THREADS"] = "1"
 
 import datetime
-from datetime import datetime as dt
 import time
 import math
 import pandas as pd
 import numpy as np
 import pandas_datareader.data as web
+from datetime import datetime as dt
 from pandas import Series, DataFrame
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
@@ -37,7 +37,8 @@ def holiday(date):
                 dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
                 dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25),
                 dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
-                dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25)]
+                dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25),
+                dt(2016,12,15)]
     return date in holidays
 
 
@@ -132,36 +133,36 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
         day = today.day
 
     # NEED TO SELECT SO THAT forecast_out TRADING DAYS HAVE HAPPENED (WEEKEND AND HOLIDAY)
+    # I THINK I KNOW THE ERROR BUT DONT WANT TO FIX IT
+    # Basically it doesn't quite line up because the first df only goes back forecast_out days
+    # but the other goes back forecast_out trading days. Hence, mismatch.
     trading_days = 0
+    start_date = dt(year, month, day)
+    shift = 0 if start_date.weekday() < 6 else start_date.weeday()-5
     for i in range(2*forecast_out):
 
-        trial_day = day-i if((day-i) > 0) else \
-                    days[month-2]+day-i
-        trial_month = month-1 if((day-i) <= 0) else month
-        #print(trial_month, trial_day)
+        trial_day = day-i-shift if((day-i-shift) > 0) else \
+                    days[month-2]+day-i-shift
 
-        date = datetime.datetime(year, trial_month, trial_day)
+        trial_month = 12 if((day-i-shift) <= 0 and month==1) else\
+                      month-1 if((day-i-shift) <= 0) else month
+
+        trial_year = year-1 if((day-i) <= 0 and month==1) else year
+
+        date = datetime.datetime(trial_year, trial_month, trial_day)
         if(date.weekday()<5 and not(holiday(date))): 
             trading_days += 1
-            #print("WAS WEEKDAY")
             if(trading_days == forecast_out):
                 pred_month = trial_month
                 pred_day = trial_day
+                pred_year = trial_year
                 break
-
-    #pred_month = month-1 if((day-forecast_out) <= 0) else month
-    #pred_day = day-forecast_out if((day-forecast_out) > 0) else \
-    #       days[month-2]+day-forecast_out
 
     # For prediction
     start = datetime.datetime(2015, 1, 1)
-    try: 
-        end = datetime.datetime(year, pred_month, pred_day-2)
-    except ValueError:
-        if(pred_month == 1):
-            end = datetime.datetime(year-1, 12, pred_day-2+days[11])
-        else:
-            end = datetime.datetime(year, pred_month-1, pred_day-2+days[pred_month-2])
+    end = datetime.datetime(pred_year, pred_month, pred_day)
+    print("END: {}".format(end))
+
     df = web.DataReader(stock, 'yahoo', start, end)
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
@@ -171,8 +172,13 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
     dfreg['Adj Close'] = dfreg['EMA']
 
     # For validation
-    new_start = datetime.datetime(2019, pred_month, pred_day)
-    new_end = datetime.datetime(2019, month, day)
+    #print(pred_year, pred_month, pred_day)
+    #print(year, month, day)
+    new_start = datetime.datetime(pred_year, pred_month, pred_day)
+    new_end = datetime.datetime(year, month, day)
+    print("NEW START: {}".format(new_start))
+    print("NEW END: {}".format(new_end))
+    #print("VALIDATION START: {} END: {}\n".format(new_start, new_end))
     new_df = web.DataReader(stock, 'yahoo', new_start, new_end)
     new_dfreg = new_df.loc[:,['Adj Close', 'Volume']]
     new_dfreg['HL_PCT'] = (new_df['High'] - new_df['Low']) / new_df['Close'] * 100.0
@@ -290,15 +296,18 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
     as_list = dfreg.index.tolist()
     # I THINK THIS IS FIXED
     #print(as_list[-forecast_out-5:])
-    #for asd in as_list[-forecast_out:]:
-    #    print(asd)
-    #print()
-    #for asd in new_df.index.tolist()[:forecast_out]:
-    #    print(asd)
-    #exit(1)
+    for asd in as_list[-forecast_out-5:]:
+        print(asd)
+    print()
+    for asd in new_df.index.tolist()[:forecast_out]:
+        print(asd)
     as_list[-forecast_out:] = new_df.index.tolist()[:forecast_out]
     dfreg.index = as_list
+    #for asd in as_list[-forecast_out-5:]:
+    #    print(asd)
     dfreg[-forecast_out:].index = new_df.index.tolist()[:forecast_out]
+    print(dfreg.tail(forecast_out+9))
+    exit(1)
 
     #
     # Trying to do all combinations
@@ -402,7 +411,7 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
            knn_corr[0], bayr_corr[0], rfr_corr[0], mean_corr[0], svr_corr[0]), good_combinations
     
 
-def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False):
+def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
     # Want to separate 1 percent of the data to forecast
     days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -414,10 +423,11 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False):
               today.day+forecast_out-days[today.month-1]
         day = today.day+forecast_out if(today.day+forecast_out == days[today.month-1]) else \
               (today.day+forecast_out)%days[today.month-1]
+              
 
     # For prediction
     start = datetime.datetime(2015, 1, 1)
-    end = datetime.datetime(2019, today.month, today.day) 
+    end = datetime.datetime(year, month, day) 
     df = web.DataReader(stock, 'yahoo', start, end)
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
@@ -572,7 +582,7 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False):
         return fit[0]
 
 
-def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False):
+def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
     # Want to separate 1 percent of the data to forecast
     days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -587,7 +597,7 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False):
 
     # For prediction
     start = datetime.datetime(2015, 1, 1)
-    end = datetime.datetime(2019, today.month, today.day) 
+    end = datetime.datetime(year, month, day) 
     df = web.DataReader(stock, 'yahoo', start, end)
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
