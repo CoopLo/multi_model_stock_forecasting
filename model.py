@@ -140,7 +140,8 @@ def risk():
     plt.show()
 
 
-def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=False):
+def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=False,
+            volume=False):
     # Assume input day is valid trading day
     # Want to separate 1 percent of the data to forecast
     # Today info
@@ -179,6 +180,11 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
     dfreg['PCT_change'] = (df['Close'] - df['Open']) / df['Open'] * 100.0
+
+    # For volume testing
+    if(volume):
+        dfreg['Adj Close'] = dfreg['Volume']
+
     dfreg['EMA'] = get_ema(dfreg, forecast_out)
     dfreg['old Adj Close'] = dfreg['Adj Close']
     dfreg['Adj Close'] = dfreg['EMA']
@@ -266,17 +272,34 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
         process.join()
 
     start = time.time()
-    reg_forecast = fits[0].predict(X_lately)
-    poly2_forecast = fits[1].predict(X_lately)
-    poly3_forecast = fits[2].predict(X_lately)
-    poly4_forecast = fits[3].predict(X_lately)
-    poly5_forecast = fits[4].predict(X_lately)
-    knn_forecast = fits[5].predict(X_lately)
-    bayr_forecast = fits[6].predict(X_lately)
-    rfr_forecast = fits[7].predict(X_lately)
-    svr_forecast = fits[8].predict(X_lately)
+    try:
+        reg_forecast = fits[0].predict(X_lately)
+        poly2_forecast = fits[1].predict(X_lately)
+        poly3_forecast = fits[2].predict(X_lately)
+        poly4_forecast = fits[3].predict(X_lately)
+        poly5_forecast = fits[4].predict(X_lately)
+        try:
+            knn_forecast = fits[5].predict(X_lately)
+        except ValueError:
+            print("Fucking really: {}".format(stock))
+            print(X_lately)
+            print(X_lately.shape)
+            exit(1)
+        bayr_forecast = fits[6].predict(X_lately)
+        rfr_forecast = fits[7].predict(X_lately)
+        svr_forecast = fits[8].predict(X_lately)
+        mlp_forecast = fits[6].predict(X_lately)
+    except AttributeError:
+        print("ISSUES WITH {}".format(stock))
+        return [0]*10, {}
+        #print(fits)
+        #print(threads)
+        #print(X_train, y_train)
+        #print(X, y)
+        #print(stock)
+        #print(dfreg)
+        #exit(1)
     #mlp_forecast = clfmlp.predict(X_lately)
-    mlp_forecast = clfbayr.predict(X_lately)
 
     # Set up dataframe
     dfreg['reg_forecast'] = np.nan
@@ -424,7 +447,8 @@ def test_ml(stock='AMZN', forecast_out=5, month=None, day=None, year=2019, plot=
            knn_corr[0], bayr_corr[0], rfr_corr[0], mean_corr[0], svr_corr[0]), good_combinations
     
 
-def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
+def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
+           best_combination=None):
     # Want to separate 1 percent of the data to forecast
     days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -505,9 +529,12 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
     # Random Forest Regressor
     clfrfr = RFR(n_estimators=15, random_state=0)
 
+    # Support Vector Regressor
+    clfsvr = SVR(gamma='auto')
+
     # Fitting in parallel
     new_threads = []
-    models = [clfreg, clfpoly2, clfpoly3, clfpoly4, clfpoly5, clfknn, clfbayr, clfrfr]
+    models = [clfreg, clfpoly2, clfpoly3, clfpoly4, clfpoly5, clfknn, clfbayr, clfrfr, clfsvr]
     more_fits = ['']*len(models)
     #print("STOCK: {}".format(stock))
     for i in range(len(models)):
@@ -537,6 +564,7 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
     bayr_forecast = more_fits[6].predict(X_lately)
     #mlp_forecast = clfmlp.predict(X_lately)
     rfr_forecast = more_fits[7].predict(X_lately)
+    svr_forecast = more_fits[8].predict(X_lately)
 
     # Set up dataframe
     dfreg['reg_forecast'] = np.nan
@@ -548,19 +576,20 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
     dfreg['bayr_forecast'] = np.nan
     dfreg['mlp_forecast'] = np.nan
     dfreg['rfr_forecast'] = np.nan
+    dfreg['svr_forecast'] = np.nan
 
     last_date = dfreg.iloc[-1].name
     last_unix = last_date
     next_unix = last_unix + datetime.timedelta(days=1)
     for i in zip(reg_forecast, poly2_forecast, poly3_forecast, poly4_forecast, poly5_forecast, 
-                 knn_forecast, bayr_forecast, rfr_forecast):
+                 knn_forecast, bayr_forecast, rfr_forecast, svr_forecast):
         next_date = next_unix
         next_unix += datetime.timedelta(days=1)
-        dfreg.loc[next_date] = list([np.nan for _ in range(len(dfreg.columns)-8)]+list(i))
+        dfreg.loc[next_date] = list([np.nan for _ in range(len(dfreg.columns)-9)]+list(i))
 
     dfreg['mean_forecast'] = dfreg[['reg_forecast', 'poly2_forecast', 'poly3_forecast',
                                  'knn_forecast', 'bayr_forecast',# 'mlp_forecast',
-                                 'rfr_forecast']].mean(axis=1)
+                                 'rfr_forecast', 'svr_forecast']].mean(axis=1)
     if(plot): 
         dfreg['Adj Close'].tail(50).plot(lw=2, figsize=(20,12))
         dfreg['mean_forecast'].tail(50).plot(lw=2, c='k')
@@ -585,22 +614,34 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
         #plt.title(stock)
         #plt.show()
 
-    try:
+    if(not(best_combination==None)):
+        #print("USING BEST MEAN: {}".format(best_combination))
+        dfreg['best_mean_forecast'] = dfreg[[*list(best_combination)]].mean(axis=1)
+        #print(dfreg['best_mean_forecast'].tail(forecast_out+1))
         fit = np.polyfit([i for i in range(forecast_out)],
-                         dfreg['mean_forecast'].values[-forecast_out:], deg=1)
-    except:
-        print("FORECASTING {} DAY OUT".format(forecast_out))
-        fit = [dfreg['mean_forecast'].values[-1] - dfreg['Adj Close'].values[-1], 2]
+                         dfreg['best_mean_forecast'].values[-forecast_out:], deg=1)
+        #print(fit)
+           
+    else:
+        try:
+            fit = np.polyfit([i for i in range(forecast_out)],
+                             dfreg['mean_forecast'].values[-forecast_out:], deg=1)
+        except:
+            print("\n\nI DONT REMEMBER WHAT THIS IS\n\n".format(forecast_out))
+            fit = [dfreg['mean_forecast'].values[-1] - dfreg['Adj Close'].values[-1], 2]
 
     string = "SHOULD GO UP" if(fit[0] > 0) else "SHOULD GO DOWN"
     #print("{} {}".format(stock, string))
-    if(fit[0] > 0):
-        return fit[0]
-    else:
-        return fit[0]
+    #print("PRICE HAS BEEN FIT: {}".format(fit[0]))
+    return fit[0]
+    #if(fit[0] > 0):
+    #    return fit[0]
+    #else:
+    #    return fit[0]
 
 
-def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=2019):
+def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
+               best_combination=None):
     # Want to separate 1 percent of the data to forecast
     days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -655,6 +696,12 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
 
     # QuadReg3
     clfpoly3 = make_pipeline(PolynomialFeatures(3), Ridge())
+
+    # QuadReg4
+    clfpoly4 = make_pipeline(PolynomialFeatures(4), Ridge())
+    
+    # QuadReg5
+    clfpoly5 = make_pipeline(PolynomialFeatures(5), Ridge())
     
     # KNN Regression
     clfknn = KNeighborsRegressor(n_neighbors=2)
@@ -670,9 +717,12 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     # Random Forest Regressor
     clfrfr = RFR(n_estimators=15, random_state=0)
 
+    # Support Vector Regressor
+    clfsvr = SVR(gamma='auto')
+
     # Fitting
     threads = []
-    models = [clfreg, clfpoly2, clfpoly3, clfknn, clfbayr, clfrfr]
+    models = [clfreg, clfpoly2, clfpoly3, clfpoly4, clfpoly5, clfknn, clfbayr, clfrfr, clfsvr]
     fits = ['']*len(models)
     for i in range(len(models)):
         process = Thread(target=fitting, args=[models[i], X_train, y_train, fits, i], name=stock)
@@ -693,28 +743,34 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     reg_forecast = fits[0].predict(X_lately)
     poly2_forecast = fits[1].predict(X_lately)
     poly3_forecast = fits[2].predict(X_lately)
-    knn_forecast = fits[3].predict(X_lately)
-    bayr_forecast = fits[4].predict(X_lately)
+    poly4_forecast = fits[3].predict(X_lately)
+    poly5_forecast = fits[4].predict(X_lately)
+    knn_forecast = fits[5].predict(X_lately)
+    bayr_forecast = fits[6].predict(X_lately)
     #mlp_forecast = clfmlp.predict(X_lately)
-    rfr_forecast = fits[5].predict(X_lately)
+    rfr_forecast = fits[7].predict(X_lately)
+    svr_forecast = fits[8].predict(X_lately)
 
     # Set up dataframe
     dfreg['reg_forecast'] = np.nan
     dfreg['poly2_forecast'] = np.nan
     dfreg['poly3_forecast'] = np.nan
+    dfreg['poly4_forecast'] = np.nan
+    dfreg['poly5_forecast'] = np.nan
     dfreg['knn_forecast'] = np.nan
     dfreg['bayr_forecast'] = np.nan
     dfreg['mlp_forecast'] = np.nan
     dfreg['rfr_forecast'] = np.nan
+    dfreg['svr_forecast'] = np.nan
 
     last_date = dfreg.iloc[-1].name
     last_unix = last_date
     next_unix = last_unix + datetime.timedelta(days=1)
-    for i in zip(reg_forecast, poly2_forecast, poly3_forecast, knn_forecast, bayr_forecast,
-                 rfr_forecast):
+    for i in zip(reg_forecast, poly2_forecast, poly3_forecast, poly4_forecast, poly5_forecast, 
+                 knn_forecast, bayr_forecast, rfr_forecast, svr_forecast):
         next_date = next_unix
         next_unix += datetime.timedelta(days=1)
-        dfreg.loc[next_date] = list([np.nan for _ in range(len(dfreg.columns)-6)]+list(i))
+        dfreg.loc[next_date] = list([np.nan for _ in range(len(dfreg.columns)-9)]+list(i))
 
     dfreg['mean_forecast'] = dfreg[['reg_forecast', 'poly2_forecast', 'poly3_forecast',
                                  'knn_forecast', 'bayr_forecast',# 'mlp_forecast',
@@ -741,6 +797,11 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
         #plt.title(stock)
         #plt.show()
 
+    #if(not(best_combination==None)):
+    #    dfreg['best_mean_forecast'] = dfreg[[*list(best_combination)]].mean(axis=1)
+    #    fit = np.polyfit([i for i in range(forecast_out)],
+    #                      dfreg['best_mean_forecast'].values[-forecast_out:], deg=1) 
+    #else:
     try:
         fit = np.polyfit([i for i in range(forecast_out)],
                          dfreg['mean_forecast'].values[-forecast_out:], deg=1)
@@ -750,6 +811,7 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
 
     string = "VOLUME SHOULD GO UP" if(fit[0] > 0) else "VOlUME SHOULD GO DOWN"
     #print("{} {}".format(stock, string))
+    #print("VOLUME HAS BEEN FIT: {}".format(fit[0]))
     return fit[0]
 
 
