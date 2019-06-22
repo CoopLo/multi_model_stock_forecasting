@@ -27,7 +27,7 @@ def holiday(date):
     holidays = [dt(2019,1,1), dt(2019,1,21), dt(2019,2,18), dt(2019,4,19), dt(2019,5,27),
                 dt(2019,7,4), dt(2019,9,2), dt(2019,11,28), dt(2019,12,25), 
                 dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
-                dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25),
+                dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25), dt(2018, 12, 5),
                 dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
                 dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25)]
     return date in holidays
@@ -61,6 +61,7 @@ def end_hold_date(forecast_out, day, month, year):
                 pred_year = trial_year
                 pred_month = trial_month
                 pred_day = trial_day
+
                 break
 
     return dt(pred_year, pred_month, pred_day)
@@ -90,6 +91,7 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
     total_spent = 0
     total_sold = 0
     end_hold = end_hold_date(forecast_out, start_day, start_month, start_year)
+    dates = 1
     print(end_hold)
     while(end_hold.date() < end_date.date()):
 
@@ -104,6 +106,7 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         stock_corr_averages = {s: 0 for s in stocks}
         correlations = np.zeros((len(stocks), 10))
         best = {}
+        vol_best = {}
         cor = []
 
         # Test each stock, hold on to relevant data
@@ -112,8 +115,10 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
             try:
                 vals, good_combs = test_ml(s, forecast_out, year=start_date.year,
                                 month=start_date.month, day=start_date.day)
+                vol_vals, vol_good_combs = test_ml(s, forecast_out, year=start_date.year,
+                                month=start_date.month, day=start_date.day, volume=True)
             except KeyError:
-                print("SOMETHING WENT WRONG WITH DATE FOR {}".format(s))
+                print("NO DATA FOR {}".format(s))
                 vals = [0]*10
                 good_combs = {}
 
@@ -121,6 +126,7 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
             correlations[idx] = vals
 
             best = model.add_combs(best, good_combs)
+            vol_best = model.add_combs(vol_best, vol_good_combs)
             progress_bar(idx, len(stocks))
 
         correlations = correlations[~np.isnan(correlations).any(axis=1)]
@@ -129,6 +135,12 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         for c in cor:
             stock_corr_averages[c[0]] += np.mean(c[1])
         
+        best_combination = max(best, key=best.get)
+        best_vol_combination = max(vol_best, key=vol_best.get)
+        num = best[best_combination]
+        vnum = vol_best[best_vol_combination]
+        print("BEST MEAN PRICE COMBINATION: {} WITH {} BESTS".format(best_combination, num))
+        print("BEST MEAN VOLUME COMBINATION: {} WITH {} BESTS".format(best_vol_combination,vnum))
         #print(stock_corr_averages)
         d = {k:v for k,v in filter(lambda t: t[1]>0.15, stock_corr_averages.items())}
         good_stocks = list(d.keys())
@@ -137,18 +149,23 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         # Forecast stocks
         stock_pred = pd.DataFrame(columns=['Stock', 'Price Slope', 'Volume Slope', 'Good Buy',
                                            'Good Put'])
+        
+        #This should be its own function man.
+        
+        #print(good_stocks)
         print("FORECASTING")
         for idx, s in enumerate(good_stocks):
             price_slope = buy_ml(s, forecast_out, month=start_date.month, day=start_date.day,
-                                 year=start_date.year)
+                                 year=start_date.year, best_combination=best_combination)
             vol_slope = buy_ml_vol(s, forecast_out, month=start_date.month, day=start_date.day,
-                                 year=start_date.year)
+                                 year=start_date.year, best_combination=best_vol_combination)
             stock_pred = stock_pred.append({"Stock":s, "Price Slope":price_slope,
                              "Volume Slope":vol_slope}, ignore_index=True)
             progress_bar(idx, len(good_stocks))
 
         stock_pred['Good Buy'] = (stock_pred['Price Slope']>0) & (stock_pred['Volume Slope']>0)
         stock_pred['Good Put'] = (stock_pred['Price Slope']<0) & (stock_pred['Volume Slope']>0)
+        #print(stock_pred)
         print("\nGood Buys:")
         print(stock_pred[stock_pred['Good Buy']])
         print("\n")
@@ -175,6 +192,13 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         #    print(bs_dat)
 
         #exit(1)
+        denominator = 999999999 if (total_spent==0) else total_spent
+        #print("AFTER CYCLE {}\nTOTAL SPENT: {}\nTOTAL SOLD: {}\nDIFFERENCE: {}\nPERCENTAGE: {}".format(dates, total_spent, total_sold, total_sold-total_spent, 100*(total_sold/denominator-1)))
+        print("AFTER CYCLE {}\nTOTAL SPENT: {}\nTOTAL SOLD: {}".format(dates,
+                                                                total_spent, total_sold))
+        print("DIFFERENCE: {}\nPERCENTAGE: {}\n\n".format(total_sold-total_spent,
+                                                      100*(total_sold/denominator-1)))
+        dates += 1
 
     print("TOTAL SPEND: {}\nTOTAL SOLD: {}\nDIFFERENCE: {}\nPERCENTAGE: {}".format(
           total_spent, total_sold, total_sold-total_spent, 100*(total_sold/total_spent-1)))
@@ -192,10 +216,27 @@ if __name__ == '__main__':
                     'CYTX', 'TGB', 'LGCY', 'IGC', 'ZNGA', 'TOPS', 'TROV', 'SPXCY',
                     'JAGX', 'CEI', 'AKR', 'BPMX', 'MYSZ','GNC', 'CHK', 'BLNK', 'SLNO', 'ZIOP']
     #penny_stocks = ['SPXCY']
-    penny_stocks = np.unique(penny_stocks)
-    #penny_stocks = penny_stocks[:15]
+    #penny_stocks = np.unique(penny_stocks)
+    penny_stocks = penny_stocks[:10]
+
+    # Regular stocks
+    stocks = ["AMZN", "VTI", "VOO", "QQQ", "MSFT", "AAPL", "VYM", "F", "GE", "AMD",
+              "ACB", "APHA", "ZNGA", "NFLX", "TSLA", "BABA", "NVDA", "XRX", "SBUX",
+              "TWTR", "GOOG", "FB", "FDX", "DIS", "K", "MNST", "SPY", "IEFA", "SPXCY",
+              "XLK", "VGT", "RYT", "QTEC", "FDN", "IGV", "HACK", "SKYY", "SOXX",
+              "ROBO", "PSJ", "IGV", "XSW", "XITK", "TECL", "IPAY", "XSD", "CLOU", "SMH", "TECS",
+              "FNG", "SOXS", "VGT", "KWEB", "PXQ", "SSG", "IGV", "AIQ", "ARKQ", "ARKW",
+              "AUGR", "CIBR", "CQQQ", "CWEB", "DTEC", "EMQQ", "FDN", "FDNI",
+              "FINX", "FNG", "FTEC", "FTXL", "FXL", "GDAT", "HACK", "IGM", "IGN", "IGV",
+              "IHAK", "IPAY", "ITEQ", "IXN", "IYW", "IZRL", "JHMT", "KEMQ", "KWEB", "LOUP",
+              "OGIG", "PLAT", "PNQI", "PRNT", "PSCT", "PSI", "PSJ", "PTF", "PXQ", "QTEC",
+              "QTUM", "REW", "ROM", "RYT", "SMH", "SOCL", "SOXL", "SSG", "TCLD", "TDIV", "TECL",
+              "TECS", "TPAY", "TTTN", "USD", "VGT", "XITK", "XLK", "XNTK", "XSD", "XSW", "XT",
+              "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", "CTL"]
+    #stocks = np.unique(stocks)
+    #stocks = stocks[:7]
 
     # Initial Date must be on day markets were open
     # ISSUES WHEN YOU HAVE START OR END ON A DAY MARKETS AREN'T OPEN
     #for i in range(2, 7):
-    simulate(penny_stocks, 5, 1, 2, 2017)#, 1, 6, 2019)
+    simulate(stocks, 7, 2, 1, 2019)#, 1, 6, 2019)
