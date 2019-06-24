@@ -28,14 +28,32 @@ from sklearn.ensemble import RandomForestRegressor as RFR
 from sklearn.svm import SVR
 
 
+def read_data(stock, start, end):                                               
+     stock_path = "/home/dr/Projects/multi_model_stock_forecasting/stock_data/"+stock+".csv"
+     try:
+         df = pd.read_csv(stock_path, parse_dates=True, infer_datetime_format=True)
+         df = df.set_index(pd.DatetimeIndex(df['Date']))
+
+     except:
+         print("Data Not Found, Writing {} Data".format(stock))
+         new_start = dt(2010, 1, 4)
+         df = web.DataReader(stock, 'yahoo', start, dt.now())
+         df.to_csv(stock_path)
+
+     return df[start:end]
+
+
 def holiday(date):
     '''
       Returns True if date is a holiday according to NYSE, else False
     '''
     holidays = [dt(2019,1,1), dt(2019,1,21), dt(2019,2,18), dt(2019,4,19), dt(2019,5,27),
                 dt(2019,7,4), dt(2019,9,2), dt(2019,11,28), dt(2019,12,25), 
+
                 dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
                 dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25), dt(2018,12,5),
+                dt(2018,3,30),
+                
                 dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
                 dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25),
                 dt(2016,12,15)]
@@ -79,7 +97,11 @@ def fitting(model, X_train, y_train, fits, i):
 
 def get_ema(data, forecast_out):
     close_vals = data['Adj Close'].values
-    ema = [close_vals[0]]
+    try:
+        ema = [close_vals[0]]
+    except IndexError:
+        return None
+
     for idx, v in enumerate(close_vals[1:]):
         ema.append(ema[idx] + 2/(forecast_out+1) * (close_vals[idx+1]-ema[idx]))
     return ema
@@ -152,29 +174,20 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
 
     end_date = dt(year, month, day)
     trading_days = get_trading_days([2017,2018,2019])
-    #print(end_date, end_date in trading_days, np.where(end_date == trading_days)[0][0])
 
     end_idx = np.where(end_date==trading_days)[0][0]
-
     end = trading_days[end_idx-forecast_out]
     new_start = trading_days[end_idx-forecast_out]
     new_end = trading_days[end_idx]
-    #for d in trading_days[end_idx-forecast_out-2:end_idx+1]:
-    #    print(d)
-    #print(end_date, end, new_start, new_end)
-    #exit(1)
-
-    #print(start_date)
-    #print(trading_days)
-    #exit(1)
-
 
     # For prediction
-    start = datetime.datetime(2015, 1, 1)
-    #print("END: \t{}".format(end))
+    start = datetime.datetime(2015, 1, 2)
 
-    #print(end)
-    df = web.DataReader(stock, 'yahoo', start, end)
+    df = read_data(stock, start, end)
+
+    #df = web.DataReader(stock, 'yahoo', start, end)
+    #print(df.index)
+    df = read_data(stock, start, end)
     df = df[df.index <= end]
     #print(df.tail(forecast_out))
     dfreg = df.loc[:,['Adj Close', 'Volume']]
@@ -186,6 +199,9 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
         dfreg['Adj Close'] = dfreg['Volume']
 
     dfreg['EMA'] = get_ema(dfreg, forecast_out)
+    if(dfreg['EMA'].empty):
+        return [0]*10, "ERROR"
+
     dfreg['old Adj Close'] = dfreg['Adj Close']
     dfreg['Adj Close'] = dfreg['EMA']
 
@@ -193,7 +209,8 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
     #print("NEW START: \t{}".format(new_start))
     #print("NEW END: \t{}".format(new_end))
     #print("VALIDATION START: {} END: {}\n".format(new_start, new_end))
-    new_df = web.DataReader(stock, 'yahoo', new_start, new_end)
+    #new_df = web.DataReader(stock, 'yahoo', new_start, new_end)
+    new_df = read_data(stock, new_start, new_end)
     #print(new_end)
     new_df = new_df[new_df.index <= new_end]
     #print(new_df)
@@ -281,10 +298,12 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
         try:
             knn_forecast = fits[5].predict(X_lately)
         except ValueError:
-            print("Fucking really: {}".format(stock))
-            print(X_lately)
-            print(X_lately.shape)
-            exit(1)
+            print("KNN ERROR: {}".format(stock))
+            #print("Fucking really: {}".format(stock))
+            #print(X_lately)
+            #print(X_lately.shape)
+            knn_forecast = np.zeros(poly5_forecast.shape)
+            #exit(1)
         bayr_forecast = fits[6].predict(X_lately)
         rfr_forecast = fits[7].predict(X_lately)
         svr_forecast = fits[8].predict(X_lately)
@@ -337,7 +356,14 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
     #for asd in new_df.index.tolist():#[:forecast_out]:
     #    print(asd)
     as_list[-forecast_out:] = new_df.index.tolist()[1:]
-    dfreg.index = as_list
+    try:
+        dfreg.index = as_list
+    except:
+        print("DATA MISALIGNMENT FOR: {}".format(stock))
+        #print(new_df)
+        #print(dfreg.tail(forecast_out+1))
+        #exit(1)
+        return [0]*10, {}
     #for asd in as_list[-forecast_out-5:]:
     #    print(asd)
     dfreg[-forecast_out:].index = new_df.index.tolist()[:forecast_out]
@@ -469,7 +495,8 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
     # For prediction
     start = datetime.datetime(2015, 1, 1)
     end = datetime.datetime(year, month, day) 
-    df = web.DataReader(stock, 'yahoo', start, end)
+    #df = web.DataReader(stock, 'yahoo', start, end)
+    df = read_data(stock, start, end)
     df = df[df.index <= end]
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
@@ -633,7 +660,7 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
     string = "SHOULD GO UP" if(fit[0] > 0) else "SHOULD GO DOWN"
     #print("{} {}".format(stock, string))
     #print("PRICE HAS BEEN FIT: {}".format(fit[0]))
-    return fit[0]
+    return fit[0], dfreg['Adj Close'].values[-forecast_out-1]
     #if(fit[0] > 0):
     #    return fit[0]
     #else:
@@ -657,7 +684,8 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     # For prediction
     start = datetime.datetime(2015, 1, 1)
     end = datetime.datetime(year, month, day) 
-    df = web.DataReader(stock, 'yahoo', start, end)
+    #df = web.DataReader(stock, 'yahoo', start, end)
+    df = read_data(stock, start, end)
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
     dfreg['PCT_change'] = (df['Close'] - df['Open']) / df['Open'] * 100.0
@@ -812,7 +840,8 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     string = "VOLUME SHOULD GO UP" if(fit[0] > 0) else "VOlUME SHOULD GO DOWN"
     #print("{} {}".format(stock, string))
     #print("VOLUME HAS BEEN FIT: {}".format(fit[0]))
-    return fit[0]
+    return fit[0], dfreg['Volume'].values[-forecast_out-1]
+
 
 
 def forecast_out_sweep(stocks, forecasts, plot=False):

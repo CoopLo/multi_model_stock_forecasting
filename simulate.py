@@ -26,8 +26,11 @@ def holiday(date):
     '''
     holidays = [dt(2019,1,1), dt(2019,1,21), dt(2019,2,18), dt(2019,4,19), dt(2019,5,27),
                 dt(2019,7,4), dt(2019,9,2), dt(2019,11,28), dt(2019,12,25), 
+
                 dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
                 dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25), dt(2018, 12, 5),
+                dt(2018,3,30),
+
                 dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
                 dt(2017,7,4), dt(2017,9,4), dt(2017,11,23), dt(2017,12,25)]
     return date in holidays
@@ -71,6 +74,9 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
              end_day=None, end_month=None, end_year=None):
 
     print("STOCKS BEING LOOKED AT: {}\n".format(stocks))
+    start_money = 10000
+    initial_money = start_money
+    print("STARTING WITH: ${}".format(start_money))
 
     # Make start date if none given
     if(start_day==None or start_month==None or start_year==None):
@@ -85,8 +91,7 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         print("DEFAULT END DATE OF TODAY")
         end_date = dt.now()
     else:
-        end_date = dt(end_year, end_month, end_day)
-
+        end_date = dt(end_year, end_month, end_day) 
     # To keep track of total earnings
     total_spent = 0
     total_sold = 0
@@ -112,6 +117,7 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         # Test each stock, hold on to relevant data
         print("\nTRAINING")
         for idx, s in enumerate(stocks):
+            #print(s)
             try:
                 vals, good_combs = test_ml(s, forecast_out, year=start_date.year,
                                 month=start_date.month, day=start_date.day)
@@ -121,6 +127,8 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
                 print("NO DATA FOR {}".format(s))
                 vals = [0]*10
                 good_combs = {}
+            if(good_combs=="ERROR" or vol_good_combs=="ERROR"):
+                continue
 
             cor.append((s, vals))
             correlations[idx] = vals
@@ -147,39 +155,69 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         #print("GOOD STOCKS: {}".format(good_stocks))
 
         # Forecast stocks
-        stock_pred = pd.DataFrame(columns=['Stock', 'Price Slope', 'Volume Slope', 'Good Buy',
-                                           'Good Put'])
+        stock_pred = pd.DataFrame(columns=['Stock', 'Last Price', 'Price Slope', 'Last Volume',
+                                           'Volume Slope', 'Good Buy', 'Good Put'])
         
         #This should be its own function man.
         
         #print(good_stocks)
         print("FORECASTING")
         for idx, s in enumerate(good_stocks):
-            price_slope = buy_ml(s, forecast_out, month=start_date.month, day=start_date.day,
-                                 year=start_date.year, best_combination=best_combination)
-            vol_slope = buy_ml_vol(s, forecast_out, month=start_date.month, day=start_date.day,
-                                 year=start_date.year, best_combination=best_vol_combination)
+            price_slope, last_price = buy_ml(s, forecast_out, month=start_date.month,
+                  day=start_date.day, year=start_date.year, best_combination=best_combination)
+
+            vol_slope, last_vol = buy_ml_vol(s, forecast_out, month=start_date.month,
+               day=start_date.day, year=start_date.year, best_combination=best_vol_combination)
+
             stock_pred = stock_pred.append({"Stock":s, "Price Slope":price_slope,
-                             "Volume Slope":vol_slope}, ignore_index=True)
+                             "Volume Slope":vol_slope, "Last Price":last_price,
+                             "Last Volume":last_vol}, ignore_index=True)
+
             progress_bar(idx, len(good_stocks))
 
         stock_pred['Good Buy'] = (stock_pred['Price Slope']>0) & (stock_pred['Volume Slope']>0)
         stock_pred['Good Put'] = (stock_pred['Price Slope']<0) & (stock_pred['Volume Slope']>0)
+        stock_pred['Price Ratio'] = stock_pred['Price Slope']/stock_pred['Last Price']
+        stock_pred['Volume Ratio'] = stock_pred['Volume Slope']/stock_pred['Last Volume']
         #print(stock_pred)
         print("\nGood Buys:")
-        print(stock_pred[stock_pred['Good Buy']])
+        stock_pred = stock_pred[stock_pred['Good Buy']].sort_values(
+                                 by=['Price Ratio', 'Volume Ratio'])
         print("\n")
         print(stock_pred[stock_pred['Good Buy']]['Stock'].values)
         buy_stocks = stock_pred[stock_pred['Good Buy']]['Stock'].values
-        for bs in buy_stocks:
-            #print("Before hold")
-            bs_dat = web.DataReader(bs, 'yahoo', start_date, dt.now())['Close']
-            total_spent += bs_dat.values[0]
-            #print("BEFORE HOLD: {}".format(bs_dat))
-            hold_dat = web.DataReader(bs, 'yahoo', end_hold, dt.now())['Close']
+
+        # This should probably be its own function.
+        # Loops through good buy stocks in order of price slope to price ratio
+        # Subtractss until can't buy any more stocks
+        bought_stocks = {}
+        num_no_buys = 0
+        while(num_no_buys < len(buy_stocks)):
+            for bs in buy_stocks:
+                #print("Before hold")
+                #bs_dat = web.DataReader(bs, 'yahoo', start_date, dt.now())['Close']
+                bs_dat = model.read_data(bs, start_date, dt.now())['Close']
+
+                if(bs_dat.values[0] < start_money):
+                     total_spent += bs_dat.values[0]
+                     start_money -= bs_dat.values[0]
+                     if(bs not in bought_stocks):
+                         bought_stocks[bs] = [1, bs_dat.values[0]]
+                     else:
+                         bought_stocks[bs][0] += 1
+                     num_no_buys = 0
+                else:
+                    num_no_buys += 1
+                #print("BEFORE HOLD: {}".format(bs_dat))
+                #hold_dat = web.DataReader(bs, 'yahoo', end_hold, dt.now())['Close']
+
+        for bs in bought_stocks.keys():
+            print("BOUGHT {} OF {} AT {}".format(bought_stocks[bs][0], bs, bought_stocks[bs][1]))
+            hold_dat = model.read_data(bs, end_hold, dt.now())['Close']
             #print("AFTER HOLD: {}".format(hold_dat))
-            total_sold += hold_dat.values[0]
-            money = hold_dat.values[0] - bs_dat.values[0]
+            total_sold += hold_dat.values[0]*bought_stocks[bs][0]
+            start_money += hold_dat.values[0]*bought_stocks[bs][0]
+            money = (hold_dat.values[0] - bought_stocks[bs][1])*bought_stocks[bs][0]
             print("MONEY MADE FROM PURCHASE OF {} IS: {} WAS {}".format(bs, money,
                   "GOOD" if money>0 else "BAD"))
                    
@@ -191,17 +229,21 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
         #    bs_dat = web.DataReader(bs, 'yahoo', end_hold, end_hold)['Close']
         #    print(bs_dat)
 
-        #exit(1)
+        # Print out data
         denominator = 999999999 if (total_spent==0) else total_spent
-        #print("AFTER CYCLE {}\nTOTAL SPENT: {}\nTOTAL SOLD: {}\nDIFFERENCE: {}\nPERCENTAGE: {}".format(dates, total_spent, total_sold, total_sold-total_spent, 100*(total_sold/denominator-1)))
         print("AFTER CYCLE {}\nTOTAL SPENT: {}\nTOTAL SOLD: {}".format(dates,
                                                                 total_spent, total_sold))
         print("DIFFERENCE: {}\nPERCENTAGE: {}\n\n".format(total_sold-total_spent,
                                                       100*(total_sold/denominator-1)))
+        print("NEW TOTAL MONEY: {}\n\n".format(start_money))
         dates += 1
 
+    # Print out final data
+    print("START DATE: {}, END DATE: {}".format(start_date, end_hold))
     print("TOTAL SPEND: {}\nTOTAL SOLD: {}\nDIFFERENCE: {}\nPERCENTAGE: {}".format(
           total_spent, total_sold, total_sold-total_spent, 100*(total_sold/total_spent-1)))
+    print("INITIAL INVESTMENT: {}, MONEY NOW: {}, PERCENT CHANGE: {}".format(initial_money,
+           start_money, 100*(start_money/initial_money - 1)))
 
 
 if __name__ == '__main__':
@@ -217,7 +259,7 @@ if __name__ == '__main__':
                     'JAGX', 'CEI', 'AKR', 'BPMX', 'MYSZ','GNC', 'CHK', 'BLNK', 'SLNO', 'ZIOP']
     #penny_stocks = ['SPXCY']
     #penny_stocks = np.unique(penny_stocks)
-    penny_stocks = penny_stocks[:10]
+    #penny_stocks = penny_stocks[:10]
 
     # Regular stocks
     stocks = ["AMZN", "VTI", "VOO", "QQQ", "MSFT", "AAPL", "VYM", "F", "GE", "AMD",
@@ -228,15 +270,15 @@ if __name__ == '__main__':
               "FNG", "SOXS", "VGT", "KWEB", "PXQ", "SSG", "IGV", "AIQ", "ARKQ", "ARKW",
               "AUGR", "CIBR", "CQQQ", "CWEB", "DTEC", "EMQQ", "FDN", "FDNI",
               "FINX", "FNG", "FTEC", "FTXL", "FXL", "GDAT", "HACK", "IGM", "IGN", "IGV",
-              "IHAK", "IPAY", "ITEQ", "IXN", "IYW", "IZRL", "JHMT", "KEMQ", "KWEB", "LOUP",
+              "IPAY", "ITEQ", "IXN", "IYW", "IZRL", "JHMT", "KEMQ", "KWEB", "LOUP",
               "OGIG", "PLAT", "PNQI", "PRNT", "PSCT", "PSI", "PSJ", "PTF", "PXQ", "QTEC",
               "QTUM", "REW", "ROM", "RYT", "SMH", "SOCL", "SOXL", "SSG", "TCLD", "TDIV", "TECL",
               "TECS", "TPAY", "TTTN", "USD", "VGT", "XITK", "XLK", "XNTK", "XSD", "XSW", "XT",
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", "CTL"]
     #stocks = np.unique(stocks)
-    #stocks = stocks[:7]
+    #stocks = stocks[:9]
 
     # Initial Date must be on day markets were open
     # ISSUES WHEN YOU HAVE START OR END ON A DAY MARKETS AREN'T OPEN
     #for i in range(2, 7):
-    simulate(stocks, 7, 2, 1, 2019)#, 1, 6, 2019)
+    simulate(stocks, 7, 2, 1, 2019, 1, 6, 2019)
