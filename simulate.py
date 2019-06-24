@@ -28,7 +28,7 @@ def holiday(date):
                 dt(2019,7,4), dt(2019,9,2), dt(2019,11,28), dt(2019,12,25), 
 
                 dt(2018,1,1), dt(2018,1,15), dt(2018,2,19), dt(2019,3,30), dt(2018,5,28),
-                dt(2018,7,4), dt(2019,9,3), dt(2018,11,22), dt(2018,12,25), dt(2018, 12, 5),
+                dt(2018,7,4), dt(2018,9,3), dt(2018,11,22), dt(2018,12,25), dt(2018, 12, 5),
                 dt(2018,3,30),
 
                 dt(2017,1,1), dt(2017,1,16), dt(2017,2,20), dt(2017,4,14), dt(2017,5,29),
@@ -74,7 +74,7 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
              end_day=None, end_month=None, end_year=None):
 
     print("STOCKS BEING LOOKED AT: {}\n".format(stocks))
-    start_money = 10000
+    start_money = 1000
     initial_money = start_money
     print("STARTING WITH: ${}".format(start_money))
 
@@ -244,6 +244,8 @@ def simulate(stocks, forecast_out=7, start_day=None, start_month=None, start_yea
           total_spent, total_sold, total_sold-total_spent, 100*(total_sold/total_spent-1)))
     print("INITIAL INVESTMENT: {}, MONEY NOW: {}, PERCENT CHANGE: {}".format(initial_money,
            start_money, 100*(start_money/initial_money - 1)))
+    percent = 188*(start_money/initial_money - 1)
+    return percent
 
 
 if __name__ == '__main__':
@@ -281,4 +283,14 @@ if __name__ == '__main__':
     # Initial Date must be on day markets were open
     # ISSUES WHEN YOU HAVE START OR END ON A DAY MARKETS AREN'T OPEN
     #for i in range(2, 7):
-    simulate(stocks, 7, 2, 1, 2019, 1, 6, 2019)
+    best_percentage = 0
+    best_forecast = ''
+    for i in range(2, 15):
+        print("FORECASTING: {}".format(i))
+        percentage = simulate(stocks, i, 2, 1, 2019)#, 1, 6, 2019)
+        if(percentage > best_percentage):
+            print("NEW BEST")
+            best_percentage = percentage
+            best_forecast = i
+        print("PERCENTAGE: {} FOR FORECAST OUT: {}\n\n\n".format(percentage, i))
+    print("\nBEST PERCENTAGE: {} BEST FORECAST: {}".format(best_percentage, best_forecast))
