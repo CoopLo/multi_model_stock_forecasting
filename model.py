@@ -298,7 +298,7 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
         try:
             knn_forecast = fits[5].predict(X_lately)
         except ValueError:
-            print("KNN ERROR: {}".format(stock))
+            #print("KNN ERROR: {}".format(stock))
             #print("Fucking really: {}".format(stock))
             #print(X_lately)
             #print(X_lately.shape)
@@ -309,7 +309,7 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
         svr_forecast = fits[8].predict(X_lately)
         mlp_forecast = fits[6].predict(X_lately)
     except AttributeError:
-        print("ISSUES WITH {}".format(stock))
+        #print("ISSUES WITH {}".format(stock))
         return [0]*10, {}
         #print(fits)
         #print(threads)
