@@ -17,7 +17,7 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
     '''
     dir_name = 's_'+str(start_date.month)+'_'+str(start_date.day)+'_'+str(start_date.year)+'_'+\
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
-               str(len(stocks))+'_'+str(int(start_money))
+               str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
     path = os.path.dirname(os.path.realpath(__file__))+'/simulations/'
     try:
         os.mkdir(path+dir_name)
@@ -88,9 +88,9 @@ def write_final(file_name, cycle, new_money, start_money, start_time, end_time, 
         fout.write("\n\nSIMULATION COMPLETE AFTER {} CYCLES\n\n".format(cycle))
         fout.write("PREDICTION\tMARKET\n\n")
         for i in range(len(pred)):
-            fout.write("{0:.5f}\t{1:.5f}".format(pred[i], mkt[i]))
+            fout.write("{0:.5f}\t{1:.5f}\n".format(pred[i], mkt[i]))
 
-        fout.write("\nSTART MONEY: {}\n".format(new_money))
+        fout.write("\nSTART MONEY: {}\n".format(start_money))
         fout.write("NEW TOTAL MONEY: {}\n".format(new_money))
         fout.write("PERCENT INCREASE: {}\n".format(100*(new_money/start_money-1)))
     fout.close()
@@ -177,7 +177,7 @@ def best_combinations(best, vol_best):
     return [best, vol_best]
 
 
-def test(stocks, forecast_out, start_date):
+def test(stocks, forecast_out, start_date, verbose=False):
     '''
         Takes in stocks, forecast length, start date, runs tests from model.py to return 
         best correlation averages, high correlation mean combinations for volume and price
@@ -209,7 +209,8 @@ def test(stocks, forecast_out, start_date):
 
         best = add_combs(best, good_combs)
         vol_best = add_combs(vol_best, vol_good_combs)
-        #progress_bar(idx, len(stocks))
+        if(verbose):
+            progress_bar(idx, len(stocks))
 
     correlations = correlations[~np.isnan(correlations).any(axis=1)]
     for c in cor:
@@ -217,7 +218,7 @@ def test(stocks, forecast_out, start_date):
     return best, vol_best, correlations, stock_corr_averages
 
 
-def forecast(good_stocks, forecast_out, start_date, best_combination):
+def forecast(good_stocks, forecast_out, start_date, best_combination, verbose=False):
     '''
       Takes in stocks, forecast length, start date, best mean combination for price and volume
     '''
@@ -237,21 +238,22 @@ def forecast(good_stocks, forecast_out, start_date, best_combination):
                          "Volume Slope":vol_slope, "Last Price":last_price,
                          "Last Volume":last_vol}, ignore_index=True)
 
-        #progress_bar(idx, len(good_stocks))
+        if(verbose):
+            progress_bar(idx, len(good_stocks))
 
     # Add columns for more relevant data
+    print(stock_pred)
     stock_pred['Good Buy'] = (stock_pred['Price Slope']>0) & (stock_pred['Volume Slope']>0)
     stock_pred['Good Put'] = (stock_pred['Price Slope']<0) & (stock_pred['Volume Slope']>0)
     stock_pred['Price Ratio'] = stock_pred['Price Slope']/stock_pred['Last Price']
     stock_pred['Volume Ratio'] = stock_pred['Volume Slope']/stock_pred['Last Volume']
 
-    #print("\nGood Buys:")
     stock_pred = stock_pred[stock_pred['Good Buy']].sort_values(
                              by=['Price Ratio', 'Volume Ratio'], ascending=False)
     return stock_pred
 
 
-def buy(buy_stocks, start_date, end_hold, new_money, file_name):
+def buy(buy_stocks, start_date, end_hold, new_money, file_name, verbose=False):
     bought_stocks = {}
     num_no_buys = 0
     total_spent = 0
@@ -259,9 +261,9 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name):
 
     while(num_no_buys < len(buy_stocks)):
         for bs in buy_stocks:
-            #print("Before hold")
-            #bs_dat = web.DataReader(bs, 'yahoo', start_date, dt.now())['Close']
             bs_dat = read_data(bs, start_date, dt.now())['Close']
+            if(verbose):
+                print("Before hold: {} at {}".format(bs, bs_dat[0]))
 
             if(bs_dat.values[0] < new_money):
                  total_spent += bs_dat.values[0]
@@ -273,19 +275,23 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name):
                  num_no_buys = 0
             else:
                 num_no_buys += 1
-            #print("BEFORE HOLD: {}".format(bs_dat))
-            #hold_dat = web.DataReader(bs, 'yahoo', end_hold, dt.now())['Close']
 
-    for bs in bought_stocks.keys():
-        #print("BOUGHT {} OF {} AT {}".format(bought_stocks[bs][0], bs, bought_stocks[bs][1]))
+    if(verbose):
+        print("STOCKS PURCHASED")
+        for key, val in bought_stocks.items():
+            print(key, val)
+
+    for bs, vals in bought_stocks.items():
         hold_dat = read_data(bs, end_hold, dt.now())['Close']
-        #print("AFTER HOLD: {}".format(hold_dat))
-        total_sold += hold_dat.values[0]*bought_stocks[bs][0]
-        new_money += hold_dat.values[0]*bought_stocks[bs][0]
-        money = (hold_dat.values[0] - bought_stocks[bs][1])*bought_stocks[bs][0]
-        #print("MONEY MADE FROM PURCHASE OF {} IS: {} WAS {}".format(bs, money,
-        #      "GOOD" if money>0 else "BAD"))
-        write_buys(file_name, bought_stocks[bs][0], bs, bought_stocks[bs][1], money)
+        total_sold += hold_dat.values[0]*vals[0]
+        new_money += hold_dat.values[0]*vals[0]
+        money = (hold_dat.values[0] - vals[1])*vals[0]
+        if(verbose):
+            print("BOUGHT {} OF {} AT {}".format(vals[0], bs, vals[1]))
+            print("AFTER HOLD: {}".format(hold_dat))
+            print("MONEY MADE FROM PURCHASE OF {} IS: {} WAS {}".format(bs, money,
+              "GOOD" if money>0 else "BAD"))
+        write_buys(file_name, vals[0], bs, vals[1], money)
     return total_spent, total_sold, new_money
 
 
@@ -331,11 +337,15 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
     if(plot):
         fig, ax = plt.subplots()
         start_market = read_data("^GSPC", start_date, dt.now())["Adj Close"].values[0]
+    print("\nSTART MARKET")
+    print(start_market)
+    print()
 
     # To keep track of total earnings
     total_spent = 0 # Do these even matter?
     total_sold = 0
     dates = 1
+    print("START DATE: {}".format(start_date))
     end_hold = end_hold_date(forecast_out, start_day, start_month, start_year)
     new_money = np.copy(start_money)
     pred_percentages, mkt_percentages = ([] for i in range(2))
@@ -352,12 +362,17 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         if(verbose):
             print("\nTESTING")
         best, vol_best, correlations, stock_corr_averages = test(stocks, forecast_out,
-                                                                  start_date)
+                                                                  start_date, verbose)
 
         # Grab data from testing results
         best_combination = best_combinations(best, vol_best)
-        num = best[best_combination[0]]
-        vnum = vol_best[best_combination[1]]
+        try:
+            num = best[best_combination[0]]
+            vnum = vol_best[best_combination[1]]
+        except:
+            num = 0
+            vnum = 0
+
         if(verbose):
             print(best_combination)
             print("BEST MEAN PRICE COMBINATION: {} WITH {} BESTS".format(best_combination[0],
@@ -370,13 +385,13 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         good_stocks = list(d.keys())
 
         # Forecast stocks and get good buys
-        stock_pred = forecast(good_stocks, forecast_out, start_date, best_combination)
+        stock_pred = forecast(good_stocks, forecast_out, start_date, best_combination, verbose)
         write_predictions(file_name, dates, stock_pred)
         buy_stocks = stock_pred[stock_pred['Good Buy']]['Stock'].values
 
         # Do buying
         total_spent, total_sold, new_money = buy(buy_stocks, start_date, end_hold, new_money,
-                                                 file_name)
+                                                 file_name, verbose)
 
         # Print out results from trading cycle
         denominator = 999999999 if (total_spent==0) else total_spent
@@ -389,7 +404,12 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         # Plot agains market
         if(plot):
             end_market = read_data("^GSPC", end_hold, dt.now())["Adj Close"].values[0]
+            print("END HOLD PERIOD: {}".format(end_hold))
+            print("\nEND MARKET HOLD: {}".format(end_market))
+            print("START MARKET: {}".format(start_market))
+            print()
             mkt_percentages.append(100*(end_market/start_market - 1))
+            print(100*(end_market/start_market - 1))
             
             # Plot percent from model
             pred_percentages.append(100*(new_money/start_money-1))
@@ -421,7 +441,8 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         #plt.show()
         path = "/home/dr/Projects/multi_model_stock_forecasting/results/"
         path += "simulation_result_{}_{}_stocks.png".format(forecast_out, len(stocks))
-        plt.savefig(path)
+        #plt.savefig(path)
+        plt.savefig(file_name+".png")
         plt.close()
 
     # Final write to file
@@ -459,14 +480,14 @@ if __name__ == '__main__':
               "TECS", "TPAY", "TTTN", "USD", "VGT", "XITK", "XLK", "XNTK", "XSD", "XSW", "XT",
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", "CTL"]
     stocks = np.unique(stocks)
-    stocks = stocks[:8]
+    stocks = stocks[:10]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
-    for i in range(5, 6):
+    for i in range(2, 15):
         #print("FORECASTING: {}".format(i))
-        percentage = simulate(stocks, i, 6, 6, 2019, start_money=1000.0, plot=True,
+        percentage = simulate(stocks, i, 2, 1, 2019, start_money=200.0, plot=True,
                               verbose=True)
         #, 1, 6, 2019)
         if(percentage > best_percentage):
@@ -474,6 +495,7 @@ if __name__ == '__main__':
             best_percentage = percentage
             best_forecast = i
         print("PERCENTAGE: {} FOR FORECAST OUT: {}\n\n\n".format(percentage, i))
+        
     print("\nBEST PERCENTAGE: {} BEST FORECAST: {}".format(best_percentage, best_forecast))
 
 # Variable number of forecast days? Choose best one for each start_date?
