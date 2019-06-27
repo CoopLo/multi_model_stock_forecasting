@@ -30,6 +30,7 @@ from sklearn.svm import SVR
 
 def read_data(stock, start, end):                                               
      stock_path = "/home/dr/Projects/multi_model_stock_forecasting/stock_data/"+stock+".csv"
+     #print("START DATE IN READ: {}".format(start))
      try:
          df = pd.read_csv(stock_path, parse_dates=True, infer_datetime_format=True)
          df = df.set_index(pd.DatetimeIndex(df['Date']))
@@ -38,6 +39,27 @@ def read_data(stock, start, end):
          print("Data Not Found, Writing {} Data".format(stock))
          new_start = dt(2010, 1, 4)
          df = web.DataReader(stock, 'yahoo', start, dt.now())
+         df.to_csv(stock_path)
+
+     #pri#nt(df[start:].index[0])
+     #print(start)
+     if(df[start:].empty or not(start in df.index)):
+         #print("PATH TO WRITE: {}".format(stock_path))
+         #print("DATAFRAME WAS EMPTY FOR: {}. GATHERING NEW DATA".format(stock))
+         new_start = dt(2015, 1, 5)
+         #print("NEW START: {}".format(new_start))
+         #print("OLD DATA")
+         #print(df)
+         new_df = web.DataReader(stock, 'iex', new_start, dt.now())
+         print("\n\n\n\nNEW DATA")
+         print(new_df)
+         exit(1)
+         #exit(1)
+         #print(df.index[0])
+         #print("SAVING DATA")
+         if(not(start in new_df.index)):
+             print("I TRIED")
+             return pd.DataFrame()
          df.to_csv(stock_path)
 
      return df[start:end]
@@ -188,6 +210,9 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
     #df = web.DataReader(stock, 'yahoo', start, end)
     #print(df.index)
     df = read_data(stock, start, end)
+    if(df.empty):
+        return [0]*10, "ERROR"
+
     df = df[df.index <= end]
     #print(df.tail(forecast_out))
     dfreg = df.loc[:,['Adj Close', 'Volume']]
@@ -211,6 +236,8 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
     #print("VALIDATION START: {} END: {}\n".format(new_start, new_end))
     #new_df = web.DataReader(stock, 'yahoo', new_start, new_end)
     new_df = read_data(stock, new_start, new_end)
+    if(new_df.empty):
+        return [0]*10, "ERROR"
     #print(new_end)
     new_df = new_df[new_df.index <= new_end]
     #print(new_df)
@@ -497,6 +524,8 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
     end = datetime.datetime(year, month, day) 
     #df = web.DataReader(stock, 'yahoo', start, end)
     df = read_data(stock, start, end)
+    if(df.empty):
+        return [0]*10, "ERROR"
     df = df[df.index <= end]
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
@@ -686,6 +715,8 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     end = datetime.datetime(year, month, day) 
     #df = web.DataReader(stock, 'yahoo', start, end)
     df = read_data(stock, start, end)
+    if(df.empty):
+        return [0]*10, "ERROR"
     dfreg = df.loc[:,['Adj Close', 'Volume']]
     dfreg['HL_PCT'] = (df['High'] - df['Low']) / df['Close'] * 100.0
     dfreg['PCT_change'] = (df['Close'] - df['Open']) / df['Open'] * 100.0
@@ -699,7 +730,14 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     X = np.array(dfreg.drop(['label'], 1))
 
     # Scale X for linear regression
-    X = preprocessing.scale(X)
+    try:
+        X = preprocessing.scale(X)
+    except ValueError:
+        print("DATA: {}".format(X))
+        print("STOCK: {}".format(stock))
+        print("START PERIOD: {}".format(start))
+        print("END PERIOD: {}".format(end))
+     
 
     # Finally want late X and early X for model
     X_lately = X[-forecast_out:]
