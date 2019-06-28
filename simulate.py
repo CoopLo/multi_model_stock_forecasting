@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pandas_datareader.data as web
+import pandas_datareader
 import os
 
 from datetime import datetime as dt
@@ -11,7 +12,7 @@ import time
 from contextlib import redirect_stderr
 
 
-def initialize_directory(stocks, start_date, end_date, start_money, forecast_out):
+def initialize_directory(stocks, start_date, end_date, start_money, forecast_out, verbose):
     '''
       Initializes the directory to store data
     '''
@@ -22,7 +23,8 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
     try:
         os.mkdir(path+dir_name)
     except FileExistsError:
-        print("DIRECTORY ALREADY EXISTS")
+        if(verbose):
+            print("DIRECTORY ALREADY EXISTS")
     file_name = path+dir_name+'/simulation.out'
     sys.stderr = open(path+dir_name+'/simulation.err', 'w+')
     with open(file_name, 'w+') as fout:
@@ -50,9 +52,12 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
 def write_predictions(file_name, cycle, df):
     with open(file_name, 'a+') as fout:
         fout.write("\nCYCLE {} PREDICTIONS\n".format(cycle))
-        fout.write(df[["Stock", "Last Price", "Price Slope", "Price Ratio",
-                           "Volume Ratio", "Good Buy"]].to_string())
-        fout.write("\n\nCYCLE {} BUYS\n".format(cycle))
+        if(df.empty):
+            fout.write("\nNO GOOD BUYS\n\n")
+        else:
+            fout.write(df[["Stock", "Last Price", "Price Slope", "Price Ratio",
+                               "Volume Ratio", "Good Buy"]].to_string())
+            fout.write("\n\nCYCLE {} BUYS\n".format(cycle))
     fout.close()
 
 
@@ -195,12 +200,18 @@ def test(stocks, forecast_out, start_date, verbose=False):
         try:
             vals, good_combs = test_ml(s, forecast_out, year=start_date.year,
                             month=start_date.month, day=start_date.day)
+
+            if(good_combs=="ERROR"):
+                #print("DIDN'T WORK FOR: {}".format(s))
+                continue
+
             vol_vals, vol_good_combs = test_ml(s, forecast_out, year=start_date.year,
                             month=start_date.month, day=start_date.day, volume=True)
         except KeyError:
             #print("NO DATA FOR {}".format(s))
             vals = [0]*10
             good_combs = {}
+
         if(good_combs=="ERROR" or vol_good_combs=="ERROR"):
             continue
 
@@ -240,16 +251,27 @@ def forecast(good_stocks, forecast_out, start_date, best_combination, verbose=Fa
 
         if(verbose):
             progress_bar(idx, len(good_stocks))
+    #print("\n\nIN FORECAST")
+    #print(stock_pred)
+    #print()
 
     # Add columns for more relevant data
-    print(stock_pred)
-    stock_pred['Good Buy'] = (stock_pred['Price Slope']>0) & (stock_pred['Volume Slope']>0)
-    stock_pred['Good Put'] = (stock_pred['Price Slope']<0) & (stock_pred['Volume Slope']>0)
+    stock_pred['Price Slope'] = stock_pred['Price Slope'].astype(np.float64)
+    stock_pred['Volume Slope'] = stock_pred['Volume Slope'].astype(np.float64)
+    stock_pred['Good Buy'] = pd.Series((stock_pred['Price Slope']>0) & 
+                                       (stock_pred['Volume Slope']>0))
+    stock_pred['Good Put'] = pd.Series((stock_pred['Price Slope']<0) & 
+                                       (stock_pred['Volume Slope']>0))
     stock_pred['Price Ratio'] = stock_pred['Price Slope']/stock_pred['Last Price']
     stock_pred['Volume Ratio'] = stock_pred['Volume Slope']/stock_pred['Last Volume']
+    #print(stock_pred)
 
+    # EMPTY IF NO GOOD BUYS
     stock_pred = stock_pred[stock_pred['Good Buy']].sort_values(
                              by=['Price Ratio', 'Volume Ratio'], ascending=False)
+    #print("\n\nSTOCK PREDICTION JUST AFTER")
+    #print(stock_pred)
+    #print()
     return stock_pred
 
 
@@ -258,10 +280,11 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, verbose=False):
     num_no_buys = 0
     total_spent = 0
     total_sold = 0
-
+    
+    #print("STOCKS TO BUY: {}".format(buy_stocks))
     while(num_no_buys < len(buy_stocks)):
         for bs in buy_stocks:
-            bs_dat = read_data(bs, start_date, dt.now())['Close']
+            bs_dat = read_data(bs, start_date, dt.now())['close']
             if(verbose):
                 print("Before hold: {} at {}".format(bs, bs_dat[0]))
 
@@ -282,7 +305,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, verbose=False):
             print(key, val)
 
     for bs, vals in bought_stocks.items():
-        hold_dat = read_data(bs, end_hold, dt.now())['Close']
+        hold_dat = read_data(bs, end_hold, dt.now())['close']
         total_sold += hold_dat.values[0]*vals[0]
         new_money += hold_dat.values[0]*vals[0]
         money = (hold_dat.values[0] - vals[1])*vals[0]
@@ -331,21 +354,20 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         end_date = dt(end_year, end_month, end_day) 
 
     # Initialize directory for plotting, log files, etc.
-    file_name = initialize_directory(stocks, start_date, end_date, start_money, forecast_out)
+    file_name = initialize_directory(stocks, start_date, end_date, start_money, forecast_out,
+                                     verbose)
 
     # Initializes plotting if plot
     if(plot):
         fig, ax = plt.subplots()
-        start_market = read_data("^GSPC", start_date, dt.now())["Adj Close"].values[0]
-    print("\nSTART MARKET")
-    print(start_market)
-    print()
+        start_market = read_data("^GSPC", start_date, dt.now())["close"].values[0]
 
     # To keep track of total earnings
     total_spent = 0 # Do these even matter?
     total_sold = 0
     dates = 1
-    print("START DATE: {}".format(start_date))
+    if(verbose):
+        print("START DATE: {}".format(start_date))
     end_hold = end_hold_date(forecast_out, start_day, start_month, start_year)
     new_money = np.copy(start_money)
     pred_percentages, mkt_percentages = ([] for i in range(2))
@@ -403,13 +425,13 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
 
         # Plot agains market
         if(plot):
-            end_market = read_data("^GSPC", end_hold, dt.now())["Adj Close"].values[0]
-            print("END HOLD PERIOD: {}".format(end_hold))
-            print("\nEND MARKET HOLD: {}".format(end_market))
-            print("START MARKET: {}".format(start_market))
-            print()
+            end_market = read_data("^GSPC", end_hold, dt.now())["close"].values[0]
+            if(verbose):
+                print("END HOLD PERIOD: {}".format(end_hold))
+                print("\nEND MARKET HOLD: {}".format(end_market))
+                print("START MARKET: {}".format(start_market))
+                print()
             mkt_percentages.append(100*(end_market/start_market - 1))
-            print(100*(end_market/start_market - 1))
             
             # Plot percent from model
             pred_percentages.append(100*(new_money/start_money-1))
@@ -461,7 +483,8 @@ if __name__ == '__main__':
                     'FCEL', 'NAVB', 'SLS', 'DPW', 'PES', 'AVEO', 'NVCN', 'APVO', 'SFUN',
                     'LIFE', 'YUMA', 'FCEL', 'AMR', 'SNSS', 'PIXY', 'HUSA', 'NAKD',
                     'CYTX', 'TGB', 'LGCY', 'IGC', 'ZNGA', 'TOPS', 'TROV', 'SPXCY',
-                    'JAGX', 'CEI', 'AKR', 'BPMX', 'MYSZ','GNC', 'CHK', 'BLNK', 'SLNO', 'ZIOP']
+                    'JAGX', 'CEI', 'AKR', 'BPMX', 'MYSZ','GNC', 'CHK', 'BLNK', 'SLNO', 'ZIOP',
+                    'AUGR', 'CTL', 'FDNI']
     penny_stocks = np.unique(penny_stocks)
     #penny_stocks = penny_stocks[:10]
 
@@ -472,30 +495,34 @@ if __name__ == '__main__':
               "XLK", "VGT", "RYT", "QTEC", "FDN", "IGV", "HACK", "SKYY", "SOXX",
               "ROBO", "PSJ", "IGV", "XSW", "XITK", "TECL", "IPAY", "XSD", "CLOU", "SMH", "TECS",
               "FNG", "SOXS", "VGT", "KWEB", "PXQ", "SSG", "IGV", "AIQ", "ARKQ", "ARKW",
-              "AUGR", "CIBR", "CQQQ", "CWEB", "DTEC", "EMQQ", "FDN", "FDNI",
+              "CIBR", "CQQQ", "CWEB", "DTEC", "EMQQ", "FDN", 
               "FINX", "FNG", "FTEC", "FTXL", "FXL", "GDAT", "HACK", "IGM", "IGN", "IGV",
               "IPAY", "ITEQ", "IXN", "IYW", "IZRL", "JHMT", "KEMQ", "KWEB", "LOUP",
               "OGIG", "PLAT", "PNQI", "PRNT", "PSCT", "PSI", "PSJ", "PTF", "PXQ", "QTEC",
               "QTUM", "REW", "ROM", "RYT", "SMH", "SOCL", "SOXL", "SSG", "TCLD", "TDIV", "TECL",
               "TECS", "TPAY", "TTTN", "USD", "VGT", "XITK", "XLK", "XNTK", "XSD", "XSW", "XT",
-              "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", "CTL"]
+              "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
+              'AUGR', 'CTL', 'FDNI']
     stocks = np.unique(stocks)
-    stocks = stocks[:10]
+    #stocks = stocks[:15]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
-    for i in range(2, 15):
+    verbose = False
+    for i in range(7,8):#, 15):
         #print("FORECASTING: {}".format(i))
         percentage = simulate(stocks, i, 2, 1, 2019, start_money=200.0, plot=True,
-                              verbose=True)
+                              verbose=verbose)
         #, 1, 6, 2019)
         if(percentage > best_percentage):
             #print("NEW BEST")
             best_percentage = percentage
             best_forecast = i
-        print("PERCENTAGE: {} FOR FORECAST OUT: {}\n\n\n".format(percentage, i))
+        if(verbose):
+            print("PERCENTAGE: {} FOR FORECAST OUT: {}\n\n\n".format(percentage, i))
         
-    print("\nBEST PERCENTAGE: {} BEST FORECAST: {}".format(best_percentage, best_forecast))
+    if(verbose):
+        print("\nBEST PERCENTAGE: {} BEST FORECAST: {}".format(best_percentage, best_forecast))
 
 # Variable number of forecast days? Choose best one for each start_date?
