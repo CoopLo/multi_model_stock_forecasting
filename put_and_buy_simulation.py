@@ -19,7 +19,7 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
     dir_name = 's_'+str(start_date.month)+'_'+str(start_date.day)+'_'+str(start_date.year)+'_'+\
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
                str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
-    path = os.path.dirname(os.path.realpath(__file__))+'/buy_forecast_sweep_simulations/'
+    path = os.path.dirname(os.path.realpath(__file__))+'/simulations_buy_put/'
     try:
         os.mkdir(path+dir_name)
     except FileExistsError:
@@ -50,14 +50,23 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
 
 
 def write_predictions(file_name, cycle, df):
+    buy_df = df[df['Good Buy']]
+    put_df = df[df['Good Put']]
     with open(file_name, 'a+') as fout:
         fout.write("\nCYCLE {} PREDICTIONS\n".format(cycle))
-        if(df.empty):
+        if(buy_df.empty):
             fout.write("\nNO GOOD BUYS\n\n")
         else:
-            fout.write(df[["Stock", "Last Price", "Price Slope", "Price Ratio",
+            fout.write(buy_df[["Stock", "Last Price", "Price Slope", "Price Ratio",
                                "Volume Ratio", "Good Buy"]].to_string())
             fout.write("\n\nCYCLE {} BUYS\n".format(cycle))
+
+        if(put_df.empty):
+            fout.write("\nNO GOOD PUTS\n\n")
+        else:
+            fout.write(put_df[["Stock", "Last Price", "Price Slope", "Price Ratio",
+                               "Volume Ratio", "Good Put"]].to_string())
+            fout.write("\n\nCYCLE {} PUTS\n".format(cycle))
     fout.close()
 
 
@@ -66,6 +75,18 @@ def write_buys(file_name, bought_stocks):
         for key, vals in bought_stocks.items():
             money = float(vals[0])*(float(vals[2]) - float(vals[1]))
             fout.write("\nBOUGHT {0} OF {1} AT {2:.4f}. SOLD AT {3:.4f}. MADE {4:.4f}".format(
+                       vals[0], key, vals[1], vals[2], money))
+    fout.close()
+
+
+def write_puts(file_name, putted_stocks):
+    print("WRITING PUTS")
+    with open(file_name, 'a+') as fout:
+        for key, vals in putted_stocks.items():
+            money = float(vals[0])*(float(vals[1]) - float(vals[2]))
+            fout.write("\nPUT {0} OF {1} AT {2:.4f}. SOLD AT {3:.4f}. MADE {4:.4f}".format(
+                       vals[0], key, vals[1], vals[2], money))
+            print("\nPUT {0} OF {1} AT {2:.4f}. SOLD AT {3:.4f}. MADE {4:.4f}".format(
                        vals[0], key, vals[1], vals[2], money))
     fout.close()
 
@@ -253,25 +274,25 @@ def forecast(good_stocks, forecast_out, start_date, best_combination, verbose=Fa
 
         if(verbose):
             progress_bar(idx, len(good_stocks))
-    #print("\n\nIN FORECAST")
-    #print(stock_pred)
-    #print()
 
     # Add columns for more relevant data
     stock_pred['Price Slope'] = stock_pred['Price Slope'].astype(np.float64)
     stock_pred['Volume Slope'] = stock_pred['Volume Slope'].astype(np.float64)
-    stock_pred['Good Buy'] = pd.Series((stock_pred['Price Slope']>0) & 
-                                       (stock_pred['Volume Slope']>0))
-    stock_pred['Good Put'] = pd.Series((stock_pred['Price Slope']<0) & 
-                                       (stock_pred['Volume Slope']>0))
+    stock_pred['Good Buy'] = pd.Series((stock_pred['Price Slope'].astype(np.float64)>0) & 
+                                       (stock_pred['Volume Slope'].astype(np.float64)>0))
+    stock_pred['Good Put'] = pd.Series((stock_pred['Price Slope'].astype(np.float64)<0) & 
+                                       (stock_pred['Volume Slope'].astype(np.float64)>0))
     stock_pred['Price Ratio'] = stock_pred['Price Slope']/stock_pred['Last Price']
     stock_pred['Volume Ratio'] = stock_pred['Volume Slope']/stock_pred['Last Volume']
     #print(stock_pred)
 
     # EMPTY IF NO GOOD BUYS
-    stock_pred = stock_pred[stock_pred['Good Buy']].sort_values(
+    stock_pred = stock_pred[(stock_pred['Good Buy']) | (stock_pred['Good Put'])].sort_values(
                              by=['Price Ratio', 'Volume Ratio'], ascending=False)
     #print("\n\nSTOCK PREDICTION JUST AFTER")
+    print("\n\nIN FORECAST")
+    print(stock_pred)
+    print()
     #print(stock_pred)
     #print()
     return stock_pred
@@ -311,6 +332,8 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
             print(key, val)
 
     for bs, vals in bought_stocks.items():
+        print("\nBOUGHT STOCK: {}".format(bs))
+        print("{}\n".format(read_data(bs, end_hold, dt.now()).columns))
         hold_dat = read_data(bs, end_hold, dt.now())['close']
         bought_stocks[bs][2] = hold_dat.values[0]
         total_sold += hold_dat.values[0]*vals[0]
@@ -373,6 +396,105 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
             
     #return total_spent, total_sold, new_money
 
+def put(put_stocks, start_date, end_hold, new_money, file_name, last_put, verbose=False):
+    putted_stocks = {}
+    num_no_puts = 0
+    total_spent = 0
+    total_sold = 0
+
+    old_money = np.copy(new_money)
+    old_total_spent = np.copy(total_spent)
+    old_total_sold = np.copy(total_sold)
+    
+    #print("STOCKS TO BUY: {}".format(buy_stocks))
+    while(num_no_puts < len(put_stocks)):
+        for ps in put_stocks:
+            ps_dat = read_data(ps, start_date, dt.now())['close']
+            #if(verbose):
+            #    print("Before hold: {} at {}".format(bs, bs_dat[0]))
+
+            if(ps_dat.values[0] < new_money):
+                 total_spent += ps_dat.values[0]
+                 new_money -= ps_dat.values[0]
+                 if(ps not in putted_stocks):
+                     putted_stocks[ps] = [1, ps_dat.values[0], 0]
+                 else:
+                     putted_stocks[ps][0] += 1
+                 num_no_puts = 0
+            else:
+                num_no_puts += 1
+
+    print("\n\nPUT STOCKS: {}".format(put_stocks))
+    print("LAST PUT: {}".format(last_put))
+    if(verbose):
+        print("STOCKS PUT")
+        for key, val in putted_stocks.items():
+            print(key, val)
+            
+
+    for ps, vals in putted_stocks.items():
+        hold_dat = read_data(ps, end_hold, dt.now())['close']
+        putted_stocks[ps][2] = hold_dat.values[0]
+        total_sold += hold_dat.values[0]*vals[0]
+        new_money += hold_dat.values[0]*vals[0]
+        print("PUT LINE: {}, SELL LINE: {}".format(vals[1], hold_dat.values[0]))
+        money = (vals[1] - hold_dat.values[0])*vals[0]
+
+        # Prints relevant details
+        if(verbose):
+            print("PUT {} OF {} AT {}".format(vals[0], ps, vals[1]))
+            print("AFTER HOLD: {}".format(hold_dat.values[0]))
+            print("MONEY MADE FROM PUT OF {} IS: {} WAS {}".format(ps, money,
+              "GOOD" if money>0 else "BAD"))
+            print("LAST PUT: {}".format(last_put))
+            print("OLD MONEY: {} NEW MONEY: {}".format(old_money, new_money))
+
+    # Doesn't buy if last buy was bad
+    # This buy good and last buy good
+    print("\n\nNEW PUT MONAYYY: {}".format(new_money))
+    if((new_money >= old_money) and (last_put)):
+        print("GOOD GOOD")
+        print("SHOULD BE HERE")
+        last_put = True
+        write_puts(file_name, putted_stocks)
+        return total_spent, total_sold, new_money, last_put
+
+    # This buy good and last buy bad
+    elif((new_money > old_money) and not(last_put)):
+        print("GOOD BAD")
+        last_put = True
+        with open(file_name, 'a+') as fout:
+            fout.write("\nLAST CYCLE LOST MONEY. THIS CYCLE MADE MONEY")
+            fout.write("\nMAKING PUTS NEXT CYCLE\n\n")
+        fout.close()
+        return old_total_spent, old_total_sold, old_money, last_put
+
+    # This buy bad and last buy good
+    elif((new_money <= old_money) and (last_put)):
+        print("BAD GOOD")
+        last_put = False
+        with open(file_name, 'a+') as fout:
+            fout.write("\nTHIS CYCLE LOST MONEY")
+            fout.write("\nNOT PUTTING NEXT CYCLE\n\n")
+        fout.close()
+        return total_spent, total_sold, new_money, last_put
+
+    # This buy bad and last buy bad
+    elif((new_money <= old_money) and not(last_put)):
+        print("BAD BAD")
+        last_put = False
+        with open(file_name, 'a+') as fout:
+            fout.write("\nLAST CYCLE LOST MONEY")
+            fout.write("\nNO PUTS MADE THIS CYCLE")
+            fout.write("\nNO PUTS WILL BE MADE NEXT CYCLE")
+        fout.close()
+        return old_total_spent, old_total_sold, old_money, last_put
+
+    # Undefined case
+    else:
+        raise Exception("UNDEFINED BEHAVIOR IN STOCK PURCHASING")
+        exit(1)
+
 
 def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017,
              end_day=None, end_month=None, end_year=None, start_money=1000, plot=False,
@@ -428,6 +550,7 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
     new_money = np.copy(start_money)
     pred_percentages, mkt_percentages = ([] for i in range(2))
     last_bought = True
+    last_put = True
     while(end_hold.date() < end_date.date()):
 
         if(verbose):
@@ -466,11 +589,35 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         # Forecast stocks and get good buys
         stock_pred = forecast(good_stocks, forecast_out, start_date, best_combination, verbose)
         write_predictions(file_name, dates, stock_pred)
+        print(stock_pred)
         buy_stocks = stock_pred[stock_pred['Good Buy']]['Stock'].values
+        put_stocks = stock_pred[stock_pred['Good Put']]['Stock'].values
+        print("\nPUT STOCKS: {}\n".format(put_stocks))
+
+        # Need to break up money between buys and puts
+        print("NEW MONEY: {}".format(new_money))
+        new_buy_money = new_money if(last_bought and not(last_put)) else 0 \
+                                  if(not(last_bought) and last_put) else new_money/2
+        new_put_money = new_money if(not(last_bought) and last_put) else 0 \
+                                  if(last_bought and not(last_put)) else new_money/2
+        print("LAST BOUGHT: {}, LAST PUT: {}".format(last_bought, last_put))
+        print("NEW BUY MONEY: {}, NEW PUT MONEY: {}".format(new_buy_money, new_put_money))
 
         # Do buying
-        total_spent, total_sold, new_money, last_bought = buy(buy_stocks, start_date, end_hold,
-                                           new_money, file_name, last_bought, verbose)
+        total_buy_spent, total_buy_sold, new_buy_money, last_bought = \
+               buy(buy_stocks, start_date, end_hold, new_buy_money, file_name,
+                   last_bought, verbose)
+
+        # Do putting
+        total_put_spent, total_put_sold, new_put_money, last_put = \
+               put(put_stocks, start_date, end_hold, new_put_money, file_name,
+                   last_bought, verbose)
+
+        new_money = new_buy_money + new_put_money
+        total_sold = total_buy_sold + total_put_sold
+        total_spent = total_buy_spent + total_put_spent
+        print("NEW BUY MONEY: {}, NEW PUT MONEY: {}".format(new_buy_money, new_put_money))
+        print("NEW MONEY: {}".format(new_money))
 
         # Print out results from trading cycle
         denominator = 999999999 if (total_spent==0) else total_spent
@@ -561,13 +708,13 @@ if __name__ == '__main__':
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
               'AUGR', 'CTL', 'FDNI', 'CLOU', 'CQQQ']
     stocks = np.unique(stocks)
-    #stocks = stocks[:20]
+    #stocks = stocks[30:50]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
     verbose = True
-    for i in range(2,15):#, 15):
+    for i in range(2, 15):
         #print("FORECASTING: {}".format(i))
         percentage = simulate(stocks, i, 1, 2, 2017, start_money=200.0, plot=True,
                               verbose=verbose)

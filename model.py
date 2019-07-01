@@ -47,14 +47,14 @@ def read_data(stock, start, end):
          df = df.set_index(pd.DatetimeIndex(df['Unnamed: 0']))
 
      except FileNotFoundError:
-         #print("Data Not Found, Writing {} Data".format(stock))
+         print("Data Not Found, Writing {} Data".format(stock))
          new_start = dt(2010, 1, 4)
          os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
          df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
                                  access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
          df.index = pd.to_datetime(df.index)
          df.to_csv(stock_path)
-         time.sleep(50)
+         time.sleep(10)
 
      if(df[start:].empty or not(start in df.index)):
          #print("DATA INCOMPLETE FOR {}. PULLING NEW DATA.".format(stock))
