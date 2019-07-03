@@ -12,14 +12,15 @@ import time
 from contextlib import redirect_stderr
 
 
-def initialize_directory(stocks, start_date, end_date, start_money, forecast_out, verbose):
+def initialize_directory(stocks, start_date, end_date, start_money, forecast_out,
+                         loss_threshold, buy_threshold, verbose):
     '''
       Initializes the directory to store data
     '''
     dir_name = 's_'+str(start_date.month)+'_'+str(start_date.day)+'_'+str(start_date.year)+'_'+\
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
                str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
-    path = os.path.dirname(os.path.realpath(__file__))+'/buy_forecast_sweep_simulations/'
+    path = os.path.dirname(os.path.realpath(__file__))+'/threshold_vs_reality/'
     try:
         os.mkdir(path+dir_name)
     except FileExistsError:
@@ -32,7 +33,9 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
         fout.write("START DATE: {}\n".format(start_date))
         fout.write("END DATE: {}\n".format(end_date))
         fout.write("STARTING MONEY: {}\n".format(start_money))
-        fout.write("FORECASTING {} DAYS OUT\n\n".format(forecast_out))
+        fout.write("FORECASTING {} DAYS OUT\n".format(forecast_out))
+        fout.write("LOSS THRESHOLD: {}\n".format(loss_threshold))
+        fout.write("BUY THRESHOLD: {}\n\n".format(buy_threshold))
         fout.write("USING STOCKS:\n")
         try:
             for i in range(10, len(stocks), 10):
@@ -78,7 +81,7 @@ def write_cycle(file_name, cycle, new_money, total_sold, total_spent, denominato
         fout.write("CYCLE END DATE: {}\n".format(end_hold))
         fout.write("NEW TOTAL MONEY: {0:.4f}\n".format(new_money))
         fout.write("MONEY MADE THIS CYCLE: {0:.4f}\n".format(total_sold-total_spent))
-        fout.write("PERCENTAGE MADE THIS CYCLE: {0:.4f}\n".format(
+        fout.write("PERCENTAGE MADE ON MONEY SPENT THIS CYCLE: {0:.4f}\n".format(
                    100*(total_sold/denominator-1)))
         fout.write("CYCLE TOOK {0:.4f} SECONDS\n\n\n".format(time.time()-start))
         fout.write("")
@@ -113,6 +116,26 @@ def progress_bar(current_num, total_num):
     sys.stdout.flush()
     if(current_num == total_num-1):
         print("[==========] 100.00%")
+
+
+def new_deposit(deposits, start_date, file_name):
+    # three deposits on 10-6-2019, two on 28-2-2019
+    deposit_dates = [dt(2019,1,16), dt(2019,1,28), dt(2019,2,15), dt(2019,2,25),
+                     dt(2019,2,28), dt(2019,4,26), dt(2019,6,10)]
+    deposit_amounts = [150., 20., 60.45, 90., 530.+10., 150., 1000.+5000.+1000.]
+    deposit_money = 0
+    for i in range(len(deposits)):
+        if(not(deposits[i]) and (start_date >= deposit_dates[i])):
+            #print("\n\nDEPOSITING {} FOR START DATE OF: {}\n\n".format(deposit_amounts[i],
+            #           start_date))
+            deposits[i] = True
+            deposit_money += deposit_amounts[i]
+
+            with open(file_name, 'a+') as fout:
+                fout.write("\n\nDEPOSITING {} FOR START DATE OF: {}\n".format(
+                                    deposit_amounts[i], start_date))
+            fout.close()
+    return deposit_money, deposits
 
 
 def holiday(date):
@@ -231,7 +254,8 @@ def test(stocks, forecast_out, start_date, verbose=False):
     return best, vol_best, correlations, stock_corr_averages
 
 
-def forecast(good_stocks, forecast_out, start_date, best_combination, verbose=False):
+def forecast(good_stocks, forecast_out, start_date, best_combination, buy_threshold=0,
+             verbose=False):
     '''
       Takes in stocks, forecast length, start date, best mean combination for price and volume
     '''
@@ -269,7 +293,8 @@ def forecast(good_stocks, forecast_out, start_date, best_combination, verbose=Fa
     #print(stock_pred)
 
     # EMPTY IF NO GOOD BUYS
-    stock_pred = stock_pred[stock_pred['Good Buy']].sort_values(
+    stock_pred = stock_pred[(stock_pred['Good Buy']) &
+                            (stock_pred['Price Ratio']>buy_threshold)].sort_values(
                              by=['Price Ratio', 'Volume Ratio'], ascending=False)
     #print("\n\nSTOCK PREDICTION JUST AFTER")
     #print(stock_pred)
@@ -277,7 +302,8 @@ def forecast(good_stocks, forecast_out, start_date, best_combination, verbose=Fa
     return stock_pred
 
 
-def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, verbose=False):
+def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, threshold=0,
+        verbose=False):
     bought_stocks = {}
     num_no_buys = 0
     total_spent = 0
@@ -296,7 +322,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
 
             if(bs_dat.values[0] < new_money):
                  total_spent += bs_dat.values[0]
-                 new_money -= bs_dat.values[0]
+                 new_money = new_money - bs_dat.values[0]
                  if(bs not in bought_stocks):
                      bought_stocks[bs] = [1, bs_dat.values[0], 0]
                  else:
@@ -328,16 +354,16 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
 
     # Doesn't buy if last buy was bad
     # This buy good and last buy good
-    if((new_money >= old_money) and (last_bought)):
-        print("GOOD GOOD")
-        print("SHOULD BE HERE")
+    if((new_money >= (1-threshold)*old_money) and (last_bought)):
+        #print("GOOD GOOD")
+        #print("SHOULD BE HERE")
         last_bought = True
         write_buys(file_name, bought_stocks)
         return total_spent, total_sold, new_money, last_bought
 
     # This buy good and last buy bad
-    elif((new_money > old_money) and not(last_bought)):
-        print("GOOD BAD")
+    elif((new_money > (1-threshold)*old_money) and not(last_bought)):
+        #print("GOOD BAD")
         last_bought = True
         with open(file_name, 'a+') as fout:
             fout.write("\nLAST CYCLE LOST MONEY. THIS CYCLE MADE MONEY")
@@ -346,8 +372,8 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
         return old_total_spent, old_total_sold, old_money, last_bought
 
     # This buy bad and last buy good
-    elif((new_money <= old_money) and (last_bought)):
-        print("BAD GOOD")
+    elif((new_money <= (1-threshold)*old_money) and (last_bought)):
+        #print("BAD GOOD")
         last_bought = False
         with open(file_name, 'a+') as fout:
             fout.write("\nTHIS CYCLE LOST MONEY")
@@ -356,8 +382,8 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
         return total_spent, total_sold, new_money, last_bought
 
     # This buy bad and last buy bad
-    elif((new_money <= old_money) and not(last_bought)):
-        print("BAD BAD")
+    elif((new_money <= (1-threshold)*old_money) and not(last_bought)):
+        #print("BAD BAD")
         last_bought = False
         with open(file_name, 'a+') as fout:
             fout.write("\nLAST CYCLE LOST MONEY")
@@ -376,7 +402,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, ver
 
 def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017,
              end_day=None, end_month=None, end_year=None, start_money=1000, plot=False,
-             verbose=False):
+             deposits=None, loss_threshold=0, buy_threshold=0, verbose=False):
     '''
       stocks - A list of stocks to test and forecast with
       forecast_out - the number of days to forecast over
@@ -409,9 +435,15 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
     else:
         end_date = dt(end_year, end_month, end_day) 
 
+    if(deposits is not None):
+        #print("HERE")
+        #print(deposits)
+        start_money = 50
+        #deposits[0] = True
+
     # Initialize directory for plotting, log files, etc.
     file_name = initialize_directory(stocks, start_date, end_date, start_money, forecast_out,
-                                     verbose)
+                                     loss_threshold, buy_threshold, verbose)
 
     # Initializes plotting if plot
     if(plot):
@@ -464,13 +496,14 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         good_stocks = list(d.keys())
 
         # Forecast stocks and get good buys
-        stock_pred = forecast(good_stocks, forecast_out, start_date, best_combination, verbose)
+        stock_pred = forecast(good_stocks, forecast_out, start_date, best_combination, 
+                              buy_threshold, verbose)
         write_predictions(file_name, dates, stock_pred)
         buy_stocks = stock_pred[stock_pred['Good Buy']]['Stock'].values
 
         # Do buying
         total_spent, total_sold, new_money, last_bought = buy(buy_stocks, start_date, end_hold,
-                                           new_money, file_name, last_bought, verbose)
+                                  new_money, file_name, last_bought, loss_threshold, verbose)
 
         # Print out results from trading cycle
         denominator = 999999999 if (total_spent==0) else total_spent
@@ -500,6 +533,9 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         # Update days for next trading cycle
         start_date = end_hold
         end_hold = end_hold_date(forecast_out, end_hold.day, end_hold.month, end_hold.year)
+        deposit_money, deposits = new_deposit(deposits, start_date, file_name)
+        new_money = new_money + float(deposit_money)
+        start_money = start_money + float(deposit_money)
         dates += 1
 
     # Print out final results
@@ -561,16 +597,20 @@ if __name__ == '__main__':
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
               'AUGR', 'CTL', 'FDNI', 'CLOU', 'CQQQ']
     stocks = np.unique(stocks)
-    #stocks = stocks[:20]
+    #stocks = stocks[:5]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
-    verbose = True
-    for i in range(2,15):#, 15):
+    verbose = False
+    loss_threshold = 0.02 # Loss threshold to skip buying next cycle
+    buy_threshold = 0.01 # Threshold for Price Ratio. Purchases stocks above this
+    deposits = [False]*7
+    for i in range(2,7):#, 15):
         #print("FORECASTING: {}".format(i))
-        percentage = simulate(stocks, i, 1, 2, 2017, start_money=200.0, plot=True,
-                              verbose=verbose)
+        percentage = simulate(stocks, i, 11, 1, 2019, start_money=200.0, plot=True,
+                              deposits=deposits, loss_threshold=loss_threshold,
+                              buy_threshold=buy_threshold, verbose=verbose)
         #, 1, 6, 2019)
         if(percentage > best_percentage):
             #print("NEW BEST")
