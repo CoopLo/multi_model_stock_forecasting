@@ -41,49 +41,58 @@ for j in range(1,9):
 
 
 def read_data(stock, start, end):                                               
-     stock_path = "/home/dr/Projects/multi_model_stock_forecasting/new_stock_data/"+stock+".csv"
-     try:
-         df = pd.read_csv(stock_path, parse_dates=True, infer_datetime_format=True)
-         df = df.set_index(pd.DatetimeIndex(df['Unnamed: 0']))
+    stock_path = "/home/dr/Projects/multi_model_stock_forecasting/new_stock_data/"+stock+".csv"
+    
+    # Last trading day
+    trading_days = get_trading_days([dt.now().year])
+    last_trade_day = trading_days[sum(dt.now() > trading_days)-1]
 
-     except FileNotFoundError:
-         print("Data Not Found, Writing {} Data".format(stock))
-         new_start = dt(2010, 1, 4)
-         os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
-         df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
-                                 access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
-         df.index = pd.to_datetime(df.index)
-         df.to_csv(stock_path)
-         time.sleep(10)
+    try:
+        df = pd.read_csv(stock_path, parse_dates=True, infer_datetime_format=True)
+        df = df.set_index(pd.DatetimeIndex(df['Unnamed: 0']))
 
-     if(df[start:].empty or not(start in df.index)):
-         #print("DATA INCOMPLETE FOR {}. PULLING NEW DATA.".format(stock))
-         new_start = dt(2014, 1, 2)
-         os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
-         try:
-             #new_df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
-             #                    access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
-             new_df = web.DataReader(stock, 'av-daily',
-                                 access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
-         except:
-             #print("ERROR IN PULLING DATE FOR: {}".format(stock))
-             return pd.DataFrame()
+    except FileNotFoundError:
+        print("Data Not Found, Writing {} Data".format(stock))
+        new_start = dt(2010, 1, 4)
+        os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
+        df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
+                                access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
+        df.index = pd.to_datetime(df.index)
+        df.to_csv(stock_path)
+        time.sleep(10)
 
-         str_start = start.strftime("%Y-%m-%d")
-         str_end = end.strftime("%Y-%m-%d")
-         if(not(str_start in new_df.index)):
-             #print("I TRIED. THIS IS THE WORST.")
-             return pd.DataFrame()
-         new_df.to_csv(stock_path)
-         new_df.index = pd.to_datetime(new_df.index)
-         #print(type(new_df.index))
-         #print(new_df[start:end])
-         #exit(1)
-         #mask = (new_df.index < start) & (new_df.index <= end)
-         #print(mask)
-         return new_df[start:end]
+    if(df[start:].empty or not(start in df.index) or not(last_trade_day in df.index)):
+        #print("DATA INCOMPLETE FOR {}. PULLING NEW DATA.".format(stock))
+        new_start = dt(2014, 1, 2)
+        os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
+        #print(df.index[-1], start, end)
+        #exit(1)
+        try:
+            #new_df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
+            #                    access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
+            new_df = web.DataReader(stock, 'av-daily',
+                                access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
+        except:
+            #print("ERROR IN PULLING DATE FOR: {}".format(stock))
+            return pd.DataFrame()
 
-     return df[start:end]
+        str_start = start.strftime("%Y-%m-%d")
+        str_end = end.strftime("%Y-%m-%d")
+        if(not(str_start in new_df.index)):
+            #print("I TRIED. THIS IS THE WORST.")
+            return pd.DataFrame()
+        new_df.to_csv(stock_path)
+        new_df.index = pd.to_datetime(new_df.index)
+        #print(type(new_df.index))
+        #print(new_df[start:end])
+        #exit(1)
+        #mask = (new_df.index < start) & (new_df.index <= end)
+        #print(mask)
+        print("PULLING NEW DATA FOR {}".format(stock))
+        print("START DATE: {}, END DATE: {}".format(start, end))
+        return new_df[start:end]
+
+    return df[start:end]
 
 
 def holiday(date):

@@ -5,7 +5,7 @@ import pandas_datareader
 import os
 
 from datetime import datetime as dt
-from model import test_ml, buy_ml, buy_ml_vol, add_combs, read_data
+from model import test_ml, buy_ml, buy_ml_vol, add_combs, read_data, get_trading_days
 from matplotlib import pyplot as plt
 import sys
 import time
@@ -20,7 +20,7 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
     dir_name = 's_'+str(start_date.month)+'_'+str(start_date.day)+'_'+str(start_date.year)+'_'+\
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
                str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
-    path = os.path.dirname(os.path.realpath(__file__))+'/threshold_vs_reality/'
+    path = os.path.dirname(os.path.realpath(__file__))+'/long_sim_l0.02_b0.005/'
     try:
         os.mkdir(path+dir_name)
     except FileExistsError:
@@ -436,10 +436,7 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         end_date = dt(end_year, end_month, end_day) 
 
     if(deposits is not None):
-        #print("HERE")
-        #print(deposits)
         start_money = 50
-        #deposits[0] = True
 
     # Initialize directory for plotting, log files, etc.
     file_name = initialize_directory(stocks, start_date, end_date, start_money, forecast_out,
@@ -533,9 +530,10 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         # Update days for next trading cycle
         start_date = end_hold
         end_hold = end_hold_date(forecast_out, end_hold.day, end_hold.month, end_hold.year)
-        deposit_money, deposits = new_deposit(deposits, start_date, file_name)
-        new_money = new_money + float(deposit_money)
-        start_money = start_money + float(deposit_money)
+        if(deposits is not None):
+            deposit_money, deposits = new_deposit(deposits, start_date, file_name)
+            new_money = new_money + float(deposit_money)
+            start_money = start_money + float(deposit_money)
         dates += 1
 
     # Print out final results
@@ -597,18 +595,19 @@ if __name__ == '__main__':
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
               'AUGR', 'CTL', 'FDNI', 'CLOU', 'CQQQ']
     stocks = np.unique(stocks)
-    #stocks = stocks[:5]
+    stocks = stocks[:5]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
-    verbose = False
+    verbose = True
     loss_threshold = 0.02 # Loss threshold to skip buying next cycle
-    buy_threshold = 0.01 # Threshold for Price Ratio. Purchases stocks above this
-    deposits = [False]*7
-    for i in range(2,7):#, 15):
+    buy_threshold = 0.005 # Threshold for Price Ratio. Purchases stocks above this
+    #deposits = [False]*7
+    deposits = None
+    for i in range(2, 15):
         #print("FORECASTING: {}".format(i))
-        percentage = simulate(stocks, i, 11, 1, 2019, start_money=200.0, plot=True,
+        percentage = simulate(stocks, i, 5, 6, 2019, start_money=2000.0, plot=True,
                               deposits=deposits, loss_threshold=loss_threshold,
                               buy_threshold=buy_threshold, verbose=verbose)
         #, 1, 6, 2019)
