@@ -55,13 +55,15 @@ def read_data(stock, start, end):
         print("Data Not Found, Writing {} Data".format(stock))
         new_start = dt(2010, 1, 4)
         os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
-        df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
-                                access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
+        df = web.DataReader(stock, 'av-daily-adjusted', new_start, dt.now(),
+                                access_key=os.getenv("ALPHAVANTAGE_API_KEY"),
+                                retry_count=10)
         df.index = pd.to_datetime(df.index)
         df.to_csv(stock_path)
         time.sleep(10)
 
-    if(df[start:].empty or not(start in df.index) or not(last_trade_day in df.index)):
+    if(df[start:].empty or not(start in df.index) or not(last_trade_day in df.index)
+       or not('adjusted close' in df.columns)):
         #print("DATA INCOMPLETE FOR {}. PULLING NEW DATA.".format(stock))
         new_start = dt(2014, 1, 2)
         os.environ["ALPHAVANTAGE_API_KEY"] = str(np.loadtxt("./api.key", dtype=str))
@@ -70,8 +72,9 @@ def read_data(stock, start, end):
         try:
             #new_df = web.DataReader(stock, 'av-daily', new_start, dt.now(),
             #                    access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
-            new_df = web.DataReader(stock, 'av-daily',
-                                access_key=os.getenv("ALPHAVANTAGE_API_KEY"))
+            new_df = web.DataReader(stock, 'av-daily-adjusted',
+                                access_key=os.getenv("ALPHAVANTAGE_API_KEY"),
+                                retry_count=10)
         except:
             #print("ERROR IN PULLING DATE FOR: {}".format(stock))
             return pd.DataFrame()
@@ -148,7 +151,7 @@ def fitting(model, X_train, y_train, fits, i):
 
 
 def get_ema(data, forecast_out):
-    close_vals = data['close'].values
+    close_vals = data['adjusted close'].values
     try:
         ema = [close_vals[0]]
     except IndexError:
@@ -164,7 +167,7 @@ def test_model():
     end = datetime.datetime(2017, 1, 11)
     df = web.DataReader("AAPL", 'yahoo', start, end)
     #print(df.tail)
-    close_px = df['close']
+    close_px = df['adjusted close']
     mavg = close_px.rolling(window=100).mean()
     rets = close_px/close_px.shift(1)-1
     fig, ax = plt.subplots()
@@ -178,7 +181,7 @@ def test_comp():
     start = datetime.datetime(2010, 1, 1)
     end = datetime.datetime(2017, 1, 11)
     dfcomp = web.DataReader(['AAPL', 'GE', 'GOOG', 'IBM', 'MSFT'], 'yahoo',
-                            start=start, end=end)['close']
+                            start=start, end=end)['adjusted close']
     retscomp = dfcomp.pct_change()
     corr = retscomp.corr()
     #print(corr)
@@ -198,7 +201,7 @@ def risk():
     start = datetime.datetime(2010, 1, 1)
     end = datetime.datetime(2017, 1, 11)
     dfcomp = web.DataReader(['AAPL', 'GE', 'GOOG', 'IBM', 'MSFT'], 'yahoo',
-                            start=start, end=end)['close']
+                            start=start, end=end)['adjusted close']
     retscomp = dfcomp.pct_change()
     corr = retscomp.corr()
 
@@ -246,20 +249,20 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
 
     df = df[df.index <= end]
     #print(df.tail(forecast_out))
-    dfreg = df.loc[:,['close', 'volume']]
-    dfreg['HL_PCT'] = (df['high'] - df['low']) / df['close'] * 100.0
-    dfreg['PCT_change'] = (df['close'] - df['open']) / df['open'] * 100.0
+    dfreg = df.loc[:,['adjusted close', 'volume']]
+    dfreg['HL_PCT'] = (df['high'] - df['low']) / df['adjusted close'] * 100.0
+    dfreg['PCT_change'] = (df['adjusted close'] - df['open']) / df['open'] * 100.0
 
     # For volume testing
     if(volume):
-        dfreg['close'] = dfreg['volume']
+        dfreg['adjusted close'] = dfreg['volume']
 
     dfreg['EMA'] = get_ema(dfreg, forecast_out)
     if(dfreg['EMA'].empty):
         return [0]*10, "ERROR"
 
-    dfreg['old close'] = dfreg['close']
-    dfreg['close'] = dfreg['EMA']
+    dfreg['old close'] = dfreg['adjusted close']
+    dfreg['adjusted close'] = dfreg['EMA']
 
     # For validation
     #print("NEW START: \t{}".format(new_start))
@@ -274,16 +277,16 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
     new_df = new_df[new_df.index <= new_end]
     #print(new_df)
     #exit(1)
-    new_dfreg = new_df.loc[:,['close', 'volume']]
-    new_dfreg['HL_PCT'] = (new_df['high'] - new_df['low']) / new_df['close'] * 100.0
-    new_dfreg['PCT_change'] = (new_df['close'] - new_df['open']) / new_df['open'] * 100.0
+    new_dfreg = new_df.loc[:,['adjusted close', 'volume']]
+    new_dfreg['HL_PCT'] = (new_df['high'] - new_df['low']) / new_df['adjusted close'] * 100.0
+    new_dfreg['PCT_change'] = (new_df['adjusted close'] - new_df['open']) / new_df['open'] * 100.0
 
     # Drop missing value
     dfreg.fillna(value=-99999, inplace=True)
     new_dfreg.fillna(value=-99999, inplace=True)
 
     # Searating the label here, we want to predict the Adjclose
-    forecast_col = 'close'
+    forecast_col = 'adjusted close'
     dfreg['label'] = dfreg[forecast_col].shift(-forecast_out)
     X = np.array(dfreg.drop(['label'], 1))
 
@@ -439,7 +442,7 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
 
     if(plot):
         dfreg['old close'].tail(20).plot(figsize=(20,12), lw=2)
-        dfreg['close'].tail(20).plot(figsize=(20,12), lw=2)
+        dfreg['adjusted close'].tail(20).plot(figsize=(20,12), lw=2)
         dfreg['reg_forecast'].tail(20).plot(lw=0.5)
         dfreg['poly2_forecast'].tail(20).plot(lw=0.5)
         dfreg['poly3_forecast'].tail(20).plot(lw=0.5)
@@ -453,7 +456,7 @@ def test_ml(stock='F', forecast_out=5, month=None, day=None, year=2019, plot=Fal
         dfreg['svr_forecast'].tail(20).plot(lw=0.5)
     
 
-    new_dfreg['Actual close'] = new_df['close']
+    new_dfreg['Actual close'] = new_df['adjusted close']
     if(plot):
         new_dfreg['Actual close'].tail(20).plot(c='g', lw=2)
     fit = np.polyfit([i for i in range(forecast_out)],
@@ -571,15 +574,15 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
     if(df.empty):
         return [0]*10, "ERROR"
     df = df[df.index <= end]
-    dfreg = df.loc[:,['close', 'volume']]
-    dfreg['HL_PCT'] = (df['high'] - df['low']) / df['close'] * 100.0
-    dfreg['PCT_change'] = (df['close'] - df['open']) / df['open'] * 100.0
+    dfreg = df.loc[:,['adjusted close', 'volume']]
+    dfreg['HL_PCT'] = (df['high'] - df['low']) / df['adjusted close'] * 100.0
+    dfreg['PCT_change'] = (df['adjusted close'] - df['open']) / df['open'] * 100.0
 
     # Drop missing value
     dfreg.fillna(value=-99999, inplace=True)
 
     # Searating the label here, we want to predict ht eAdjclose
-    forecast_col = 'close'
+    forecast_col = 'adjusted close'
     dfreg['label'] = dfreg[forecast_col].shift(-forecast_out)
     X = np.array(dfreg.drop(['label'], 1))
 
@@ -694,7 +697,7 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
     #                                "poly3_forecast", "poly4_forecast", "poly5_forecast",
     #                                "bayr_forecast", "rfr_forecast", "svr_forecast"]])
     if(plot): 
-        dfreg['close'].tail(50).plot(lw=2, figsize=(20,12))
+        dfreg['adjusted close'].tail(50).plot(lw=2, figsize=(20,12))
         dfreg['mean_forecast'].tail(50).plot(lw=2, c='k')
         dfreg['bayr_forecast'].tail(50).plot(lw=0.5)
         dfreg['knn_forecast'].tail(50).plot(lw=0.5)
@@ -734,13 +737,13 @@ def buy_ml(stock, forecast_out=5, month=None, day=None, plot=False, year=2019,
                              dfreg['mean_forecast'].values[-forecast_out:], deg=1)
         except:
             print("\n\nI DONT REMEMBER WHAT THIS IS\n\n".format(forecast_out))
-            fit = [dfreg['mean_forecast'].values[-1] - dfreg['close'].values[-1], 2]
+            fit = [dfreg['mean_forecast'].values[-1] - dfreg['adjusted close'].values[-1], 2]
 
     string = "SHOULD GO UP" if(fit[0] > 0) else "SHOULD GO DOWN"
     #print("{} {}".format(stock, string))
     #print("PRICE HAS BEEN FIT: {}".format(fit[0]))
     #print("FIT SLOPE: {}".format(fit[0]))
-    return fit[0], dfreg['close'].values[-forecast_out-1]
+    return fit[0], dfreg['adjusted close'].values[-forecast_out-1]
     #if(fit[0] > 0):
     #    return fit[0]
     #else:
@@ -769,9 +772,9 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
     #print("BUYING")
     if(df.empty):
         return [0]*10, "ERROR"
-    dfreg = df.loc[:,['close', 'volume']]
-    dfreg['HL_PCT'] = (df['high'] - df['low']) / df['close'] * 100.0
-    dfreg['PCT_change'] = (df['close'] - df['open']) / df['open'] * 100.0
+    dfreg = df.loc[:,['adjusted close', 'volume']]
+    dfreg['HL_PCT'] = (df['high'] - df['low']) / df['adjusted close'] * 100.0
+    dfreg['PCT_change'] = (df['adjusted close'] - df['open']) / df['open'] * 100.0
 
     # Drop missing value
     dfreg.fillna(value=-99999, inplace=True)
@@ -925,7 +928,7 @@ def buy_ml_vol(stock, forecast_out=5, month=None, day=None, plot=False, year=201
                          dfreg['mean_forecast'].values[-forecast_out:], deg=1)
     except:
         print("FORECASTING {} DAY OUT".format(forecast_out))
-        fit = [dfreg['mean_forecast'].values[-1] - dfreg['close'].values[-1], 2]
+        fit = [dfreg['mean_forecast'].values[-1] - dfreg['adjusted close'].values[-1], 2]
 
     string = "VOLUME SHOULD GO UP" if(fit[0] > 0) else "VOlUME SHOULD GO DOWN"
     #print("{} {}".format(stock, string))
