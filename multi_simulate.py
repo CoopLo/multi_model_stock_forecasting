@@ -3,6 +3,7 @@ import pandas as pd
 import pandas_datareader.data as web
 import pandas_datareader
 import os
+from shutil import copy2
 
 from datetime import datetime as dt
 from model import test_ml, buy_ml, buy_ml_vol, add_combs, read_data, get_trading_days
@@ -11,6 +12,86 @@ import sys
 import time
 from contextlib import redirect_stderr
 from multiprocessing import Process
+
+
+def rename(file_name):
+    '''
+      Renames most recent simulation.out to proper number
+    '''
+    dir_name = file_name[:file_name.rfind('/')]
+    num_restarts = -1
+    for fi in os.listdir(dir_name):
+        num_restarts += int(".out" in fi)
+
+    copy2(file_name, dir_name+"/{}.simulation.out".format(num_restarts))
+
+
+def gather_data(file_name):
+    '''
+        Gathers past data from old simulation
+    '''
+    with open(file_name) as fi:
+        lines = fi.readlines()
+        last_idx = 0
+        for idx, l in enumerate(lines):
+            if("CYCLE TOOK" in l):
+                last_idx = idx
+                #print(idx, l)
+        if(last_idx == 0):
+            # No cycles complete, just restart from beginning
+            return [None]*7
+
+        # Doesn't change based on restarted or not
+        lines = lines[:last_idx]
+        state_line = lines[last_idx-11]
+        if("NOT PURCHASING NEXT CYCLE" in state_line):
+            last_bought = False
+        else:
+            last_bought = True
+
+        cyc_number = int(lines[last_idx-8].split(" ")[1])
+        cyc_end = dt(*[int(x) for x in lines[last_idx-6].split(" ")[3].split('-')]) 
+        pred_pcts = []
+        mkt_pcts = []
+
+        for l in lines:
+            if("STARTING MONEY" in l):
+                start_money = float(l.split(":")[1])
+            elif("NEW TOTAL MONEY" in l):
+                new_total_money = float(l.split(":")[1])
+            elif("PREDICTION PERCENTAGE" in l):
+                pred_pcts.append(float(l.split(":")[1]))
+            elif("MARKET PERCENTAGE" in l):
+                mkt_pcts.append(float(l.split(":")[1]))
+
+    return start_money, new_total_money, pred_pcts, mkt_pcts, last_bought, cyc_number, \
+           cyc_end
+
+
+def write_restart(file_name, start_money, new_total_money, pred_pcts, mkt_pcts, last_bought,
+                  cyc_number, cyc_end):
+    '''
+      Takes gathered data, writes to new simulation out file
+    '''
+    if(start_money == None):
+        with open(file_name, 'a+') as fout:
+            fout.write("NOWHERE TO RESTART, PLEASE DELETE DIRECTORY AND RUN AGAIN")
+            exit(1)
+        fout.close()
+    else: 
+        new_line = str('X'*80)
+        with open(file_name, "a+") as fout:
+            fout.write("\n\n{}\n".format(new_line))
+            fout.write("{}\n".format(new_line))
+            fout.write("\n\nRESTARTING FROM CYCLE {}\n".format(cyc_number))
+            fout.write("\nORIGINAL STARTING MONEY: {}".format(start_money))
+            fout.write("\nCURRENT MONEY: {}".format(new_total_money))
+            fout.write("\nBUYING NEXT CYCLE: {}".format(last_bought))
+            fout.write("\n\nPREDICTION\tMARKET SO FAR\n")
+            for i in range(len(pred_pcts)):
+                fout.write("{0:.5f}\t{1:.5f}\n".format(pred_pcts[i], mkt_pcts[i]))
+            fout.write("\nSTARTING NEXT CYCLE AT: {}\n\n".format(cyc_end))
+        fout.close()
 
 
 def initialize_directory(stocks, start_date, end_date, start_money, forecast_out,
@@ -22,18 +103,28 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
                str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
     try:
-        hold_name = '/short_threshold_sweep_sims/multiprocess_sim_l{}_b{}'.format(loss_threshold, buy_threshold)
+        hold_name = '/try_restart/multiprocess_sim_l{}_b{}'.format(loss_threshold, buy_threshold)
         path = os.path.dirname(os.path.realpath(__file__))+hold_name
+        file_name = path+dir_name+'/simulation.out'
         os.mkdir(path + dir_name)
+        sys.stderr = open(path+dir_name+'/simulation.err', 'w+')
 
-    #path = os.path.dirname(os.path.realpath(__file__))+'/multiprocess_long_sim_l0.02_b0.005/'
-    #try:
-    #    os.mkdir(path+dir_name)
     except FileExistsError:
+        sys.stderr = open(path+dir_name+'/simulation.err', 'w+')
         if(verbose):
-            print("DIRECTORY ALREADY EXISTS")
-    file_name = path+dir_name+'/simulation.out'
-    sys.stderr = open(path+dir_name+'/simulation.err', 'w+')
+            print("DIRECTORY ALREADY EXISTS, RESTARTING")
+
+        if("simulation.out.png" in os.listdir(path+dir_name)):
+            print("SIMULATION DONE")
+            return None
+            
+        rename(file_name)
+        gathered_data = gather_data(file_name)
+        write_restart(file_name, *gathered_data)
+        #print(type(gathered_data))
+        print(*gathered_data)
+        return file_name, gathered_data
+
     with open(file_name, 'w+') as fout:
         fout.write("SIMULATION OF STOCK FORECASTING\n\n")
         fout.write("START DATE: {}\n".format(start_date))
@@ -55,7 +146,8 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
         fout.write('\n\n')
 
     fout.close()
-    return file_name
+    return file_name, (start_money, start_money, [], [], True, 0, \
+           end_hold_date(forecast_out, start_date.day, start_date.month, start_date.year))
 
 
 def write_predictions(file_name, cycle, df):
@@ -80,7 +172,7 @@ def write_buys(file_name, bought_stocks):
 
 
 def write_cycle(file_name, cycle, new_money, total_sold, total_spent, denominator, start_date,
-                end_hold, start):
+                end_hold, start, pred_percent, mkt_percent):
     with open(file_name, 'a+') as fout:
         fout.write("\n\nCYCLE {} RESULTS\n".format(cycle))
         fout.write("CYCLE START DATE: {}\n".format(start_date))
@@ -89,6 +181,8 @@ def write_cycle(file_name, cycle, new_money, total_sold, total_spent, denominato
         fout.write("MONEY MADE THIS CYCLE: {0:.4f}\n".format(total_sold-total_spent))
         fout.write("PERCENTAGE MADE ON MONEY SPENT THIS CYCLE: {0:.4f}\n".format(
                    100*(total_sold/denominator-1)))
+        fout.write("CUMULATIVE PREDICTION PERCENTAGE: {}\n".format(pred_percent))
+        fout.write("CUMULATIVE MARKET PERCENTAGE: {}\n".format(mkt_percent))
         fout.write("CYCLE TOOK {0:.4f} SECONDS\n\n\n".format(time.time()-start))
         fout.write("")
         new_line = str('X'*80)
@@ -373,7 +467,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, thr
         last_bought = True
         with open(file_name, 'a+') as fout:
             fout.write("\nLAST CYCLE LOST MONEY. THIS CYCLE MADE MONEY")
-            fout.write("\nMAKING PURCHASES NEXT CYCLE\n\n")
+            fout.write("\nMAKING PURCHASES NEXT CYCLE\n")
         fout.close()
         return old_total_spent, old_total_sold, old_money, last_bought
 
@@ -384,7 +478,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, thr
         write_buys(file_name, bought_stocks)
         with open(file_name, 'a+') as fout:
             fout.write("\n\nTHIS CYCLE LOST MONEY")
-            fout.write("\nNOT PURCHASING NEXT CYCLE\n\n")
+            fout.write("\nNOT PURCHASING NEXT CYCLE\n")
         fout.close()
         return total_spent, total_sold, new_money, last_bought
 
@@ -395,7 +489,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, thr
         with open(file_name, 'a+') as fout:
             fout.write("\nLAST CYCLE LOST MONEY")
             fout.write("\nNO PURCHASES MADE THIS CYCLE")
-            fout.write("\nNO PURCHASES WILL BE MADE NEXT CYCLE")
+            fout.write("\nNOT PURCHASING NEXT CYCLE\n")
         fout.close()
         return old_total_spent, old_total_sold, old_money, last_bought
 
@@ -446,8 +540,14 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         start_money = 50
 
     # Initialize directory for plotting, log files, etc.
-    file_name = initialize_directory(stocks, start_date, end_date, start_money, forecast_out,
+    file_name, gathered_data = \
+         initialize_directory(stocks, start_date, end_date, start_money, forecast_out,\
                                      loss_threshold, buy_threshold, verbose)
+    _, new_money, pred_percentages, mkt_percentages, last_bought, dates, end_hold = \
+         (x for x in gathered_data)
+
+    if(file_name == None):
+        return None
 
     # Initializes plotting if plot
     if(plot):
@@ -457,13 +557,12 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
     # To keep track of total earnings
     total_spent = 0 # Do these even matter?
     total_sold = 0
-    dates = 1
     if(verbose):
         print("START DATE: {}".format(start_date))
-    end_hold = end_hold_date(forecast_out, start_day, start_month, start_year)
-    new_money = np.copy(start_money)
-    pred_percentages, mkt_percentages = ([] for i in range(2))
-    last_bought = True
+    #end_hold = end_hold_date(forecast_out, start_day, start_month, start_year)
+    #new_money = np.copy(start_money)
+    #pred_percentages, mkt_percentages = ([] for i in range(2))
+    #last_bought = True
     while(end_hold.date() < end_date.date()):
 
         if(verbose):
@@ -532,7 +631,7 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
 
         # Write data
         write_cycle(file_name, dates, new_money, total_sold, total_spent, denominator,
-                    start_date, end_hold, start)
+                    start_date, end_hold, start, pred_percentages[-1], mkt_percentages[-1])
 
         # Update days for next trading cycle
         start_date = end_hold
@@ -562,7 +661,8 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         path = "/home/dr/Projects/multi_model_stock_forecasting/results/"
         path += "simulation_result_{}_{}_stocks.png".format(forecast_out, len(stocks))
         #plt.savefig(path)
-        plt.savefig(file_name+".png")
+        plt.savefig(file_name[:file_name.rfind('/')]+"/final_graph.png")
+        #plt.savefig(file_name+".png")
         plt.close()
 
     # Final write to file
@@ -602,12 +702,12 @@ if __name__ == '__main__':
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
               'AUGR', 'CTL', 'FDNI', 'CLOU', 'CQQQ']
     stocks = np.unique(stocks)
-    #stocks = stocks[:5]
+    stocks = stocks[:15]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
-    verbose = False
+    verbose = True
     loss_threshold = 0.02 # Loss threshold to skip buying next cycle
     buy_threshold = 0.005 # Threshold for Price Ratio. Purchases stocks above this
     #deposits = [False]*7
@@ -615,12 +715,12 @@ if __name__ == '__main__':
     procs = []
     #for i in range(2, 15):
     #for i in range(10, 100, 10):
-    for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03]:
-        for b in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, -0.005, -0.001]:
-            if((l==0.0) and (b==0.0)):
-                continue
-    #for l in [0.0]:
-    #    for b in [0.0]:
+    #for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03]:
+    #    for b in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, -0.005, -0.001]:
+    #        if((l==0.0) and (b==0.0)):
+    #            continue
+    for l in [0.0]:
+        for b in [0.0]:
     #for l in [0.01, 0.005]:
     #    for b in [0.01, 0.005]:
             #print("FORECASTING: {}".format(i))
