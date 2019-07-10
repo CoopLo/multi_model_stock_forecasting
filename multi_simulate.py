@@ -21,9 +21,14 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
     dir_name = 's_'+str(start_date.month)+'_'+str(start_date.day)+'_'+str(start_date.year)+'_'+\
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
                str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
-    path = os.path.dirname(os.path.realpath(__file__))+'/multiprocess_long_sim_l0.02_b0.005/'
     try:
-        os.mkdir(path+dir_name)
+        hold_name = '/short_threshold_sweep_sims/multiprocess_sim_l{}_b{}'.format(loss_threshold, buy_threshold)
+        path = os.path.dirname(os.path.realpath(__file__))+hold_name
+        os.mkdir(path + dir_name)
+
+    #path = os.path.dirname(os.path.realpath(__file__))+'/multiprocess_long_sim_l0.02_b0.005/'
+    #try:
+    #    os.mkdir(path+dir_name)
     except FileExistsError:
         if(verbose):
             print("DIRECTORY ALREADY EXISTS")
@@ -317,7 +322,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, thr
     #print("STOCKS TO BUY: {}".format(buy_stocks))
     while(num_no_buys < len(buy_stocks)):
         for bs in buy_stocks:
-            bs_dat = read_data(bs, start_date, dt.now())['close']
+            bs_dat = read_data(bs, start_date, dt.now())['adjusted close']
             #if(verbose):
             #    print("Before hold: {} at {}".format(bs, bs_dat[0]))
 
@@ -338,7 +343,7 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, thr
             print(key, val)
 
     for bs, vals in bought_stocks.items():
-        hold_dat = read_data(bs, end_hold, dt.now())['close']
+        hold_dat = read_data(bs, end_hold, dt.now())['adjusted close']
         bought_stocks[bs][2] = hold_dat.values[0]
         total_sold += hold_dat.values[0]*vals[0]
         new_money += hold_dat.values[0]*vals[0]
@@ -376,8 +381,9 @@ def buy(buy_stocks, start_date, end_hold, new_money, file_name, last_bought, thr
     elif((new_money <= (1-threshold)*old_money) and (last_bought)):
         #print("BAD GOOD")
         last_bought = False
+        write_buys(file_name, bought_stocks)
         with open(file_name, 'a+') as fout:
-            fout.write("\nTHIS CYCLE LOST MONEY")
+            fout.write("\n\nTHIS CYCLE LOST MONEY")
             fout.write("\nNOT PURCHASING NEXT CYCLE\n\n")
         fout.close()
         return total_spent, total_sold, new_money, last_bought
@@ -446,7 +452,7 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
     # Initializes plotting if plot
     if(plot):
         fig, ax = plt.subplots()
-        start_market = read_data("^GSPC", start_date, dt.now())["close"].values[0]
+        start_market = read_data("^GSPC", start_date, dt.now())["adjusted close"].values[0]
 
     # To keep track of total earnings
     total_spent = 0 # Do these even matter?
@@ -513,7 +519,7 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
 
         # Plot agains market
         if(plot):
-            end_market = read_data("^GSPC", end_hold, dt.now())["close"].values[0]
+            end_market = read_data("^GSPC", end_hold, dt.now())["adjusted close"].values[0]
             if(verbose):
                 print("END HOLD PERIOD: {}".format(end_hold))
                 print("\nEND MARKET HOLD: {}".format(end_market))
@@ -607,24 +613,33 @@ if __name__ == '__main__':
     #deposits = [False]*7
     deposits = None
     procs = []
-    for i in range(2, 15):
-        #print("FORECASTING: {}".format(i))
-        p = Process(target=simulate, args=(stocks, i, 2, 2, 2017, None, None, None,
-                              2000.0, True, deposits, loss_threshold, buy_threshold, verbose))
-        procs.append(p)
-        p.start()
+    #for i in range(2, 15):
+    #for i in range(10, 100, 10):
+    for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03]:
+        for b in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, -0.005, -0.001]:
+            if((l==0.0) and (b==0.0)):
+                continue
+    #for l in [0.0]:
+    #    for b in [0.0]:
+    #for l in [0.01, 0.005]:
+    #    for b in [0.01, 0.005]:
+            #print("FORECASTING: {}".format(i))
+            p = Process(target=simulate, args=(stocks, 8, 2, 1, 2019, None, None, None,
+                        2000.0, True, deposits, l, b, verbose))
+            procs.append(p)
+            p.start()
 
-    for p in procs:
-        p.join()
-        #, 1, 6, 2019)
-        #if(percentage > best_percentage):
-        #    #print("NEW BEST")
-        #    best_percentage = percentage
-        #    best_forecast = i
-        #if(verbose):
-        #    print("PERCENTAGE: {} FOR FORECAST OUT: {}\n\n\n".format(percentage, i))
-        
-    if(verbose):
-        print("\nBEST PERCENTAGE: {} BEST FORECAST: {}".format(best_percentage, best_forecast))
+        for p in procs:
+            p.join()
+            #, 1, 6, 2019)
+            #if(percentage > best_percentage):
+            #    #print("NEW BEST")
+            #    best_percentage = percentage
+            #    best_forecast = i
+            #if(verbose):
+            #    print("PERCENTAGE: {} FOR FORECAST OUT: {}\n\n\n".format(percentage, i))
+            
+        if(verbose):
+            print("\nBEST PERCENTAGE: {} BEST FORECAST: {}".format(best_percentage, best_forecast))
 
 # Variable number of forecast days? Choose best one for each start_date?
