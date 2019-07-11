@@ -117,7 +117,8 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
                'e_'+str(end_date.month)+'_'+str(end_date.day)+'_'+str(end_date.year)+'_'+\
                str(len(stocks))+'_'+str(int(start_money))+'_'+str(int(forecast_out))
     try:
-        hold_name = '/long_threshold_sweep_sims/multiprocess_sim_l{}_b{}'.format(loss_threshold, buy_threshold)
+        hold_name = '/long_threshold_sweep_sims/multiprocess_sim_l{}_b{}'.format(loss_threshold,
+                    buy_threshold)
         path = os.path.dirname(os.path.realpath(__file__))+hold_name
         file_name = path+dir_name+'/simulation.out'
         os.mkdir(path + dir_name)
@@ -161,7 +162,8 @@ def initialize_directory(stocks, start_date, end_date, start_money, forecast_out
 
     fout.close()
     return file_name, (start_money, start_money, [0], [0], True, 0, \
-           end_hold_date(forecast_out, start_date.day, start_date.month, start_date.year), [])
+           end_hold_date(forecast_out, start_date.day, start_date.month, start_date.year), \
+           [start_date])
 
 
 def write_predictions(file_name, cycle, df):
@@ -669,8 +671,9 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
     percent = 100*(new_money/start_money - 1)
 
     if(plot):
-        mkt_percentages = np.unique(mkt_percentages)
-        pred_percentages = np.unique(pred_percentages)
+        end_hold_dates = np.unique(end_hold_dates)
+        mkt_percentages = mkt_percentages[:len(end_hold_dates)]
+        pred_percentages = pred_percentages[:len(end_hold_dates)]
 
         ax.plot(mkt_percentages, marker='s', color='k', label='Market')
         ax.plot(pred_percentages, marker='p', color='g', label='Prediction')
@@ -682,15 +685,15 @@ def simulate(stocks, forecast_out=7, start_day=2, start_month=1, start_year=2017
         path += "simulation_result_{}_{}_stocks.png".format(forecast_out, len(stocks))
         #plt.savefig(path)
         ticks = ax.get_xticks()
-        vals = [int(t) for t in ticks if((t==int(t)) and (t>=0))]
-        vals = [v for idx, v in enumerate(vals) if(idx < len(end_hold_dates))]
+        vals = [int(t) for t in ticks if((t==int(t)) and (t>=0) and (t<len(end_hold_dates)))]
+        #vals = [v for idx, v in enumerate(vals) if(idx < len(end_hold_dates))]
         print("TICKS")
         print(vals)
         print("END HOLD DATES")
         print(end_hold_dates)
         ax.set_xticks(vals)
         tick_dates = [end_hold_dates[v] for v in vals]
-        ax.set_xticklabels(("{}-{}-{}".format(t.day,t.month,t.year) for t in tick_dates),
+        ax.set_xticklabels(("{}-{}-{}".format(t.month,t.day,t.year) for t in tick_dates),
                            rotation=30)
 
         plt.savefig(file_name[:file_name.rfind('/')]+"/final_graph.png")
@@ -734,12 +737,12 @@ if __name__ == '__main__':
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
               'AUGR', 'CTL', 'FDNI', 'CLOU', 'CQQQ']
     stocks = np.unique(stocks)
-    stocks = stocks[:5]
+    stocks = stocks[:10]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
     best_forecast = ''
-    verbose = False
+    verbose = True
     #loss_threshold = 0.02 # Loss threshold to skip buying next cycle
     #buy_threshold = 0.005 # Threshold for Price Ratio. Purchases stocks above this
     #deposits = [False]*7
@@ -747,16 +750,16 @@ if __name__ == '__main__':
     procs = []
     #for i in range(2, 15):
     #for i in range(10, 100, 10):
-    for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, -0.005]:
-        for b in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, -0.005, -0.001]:
+    #for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, -0.005]:
+    #    for b in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, -0.005, -0.001]:
     #        if((l==0.0) and (b==0.0)):
     #            continue
-    #for l in [0.0]:
-    #    for b in [0.0]:
+    for l in [0.0]:
+        for b in [-0.005]:
     #for l in [0.01, 0.005]:
     #    for b in [0.01, 0.005]:
             #print("FORECASTING: {}".format(i))
-            p = Process(target=simulate, args=(stocks, 8, 2, 2, 2017, 10, 7, 2019,
+            p = Process(target=simulate, args=(stocks, 2, 2, 1, 2019, 10, 7, 2019,
                         2000.0, True, deposits, l, b, verbose))
             procs.append(p)
             p.start()
