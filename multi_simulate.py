@@ -737,7 +737,7 @@ if __name__ == '__main__':
               "XTH", "XWEB", "NWL", "MO", "IVZ", "M", "KIM", "T", "IRM", "MAC", 
               'AUGR', 'CTL', 'FDNI', 'CLOU', 'CQQQ']
     stocks = np.unique(stocks)
-    stocks = stocks[:10]
+    #stocks = stocks[:10]
 
     # Initial Date must be on day markets were open
     best_percentage = 0
@@ -750,16 +750,16 @@ if __name__ == '__main__':
     procs = []
     #for i in range(2, 15):
     #for i in range(10, 100, 10):
-    #for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, -0.005]:
-    #    for b in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, -0.005, -0.001]:
+    for l in [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, -0.005]:
+        for b in [0.0, 0.005, 0.01, 0.015, -0.005, -0.001, -0.01]:
     #        if((l==0.0) and (b==0.0)):
     #            continue
-    for l in [0.0]:
-        for b in [-0.005]:
+    #for l in [0.0]:
+    #    for b in [-0.005]:
     #for l in [0.01, 0.005]:
     #    for b in [0.01, 0.005]:
             #print("FORECASTING: {}".format(i))
-            p = Process(target=simulate, args=(stocks, 2, 2, 1, 2019, 10, 7, 2019,
+            p = Process(target=simulate, args=(stocks, 8, 2, 2, 2017, 10, 7, 2019,
                         2000.0, True, deposits, l, b, verbose))
             procs.append(p)
             p.start()
