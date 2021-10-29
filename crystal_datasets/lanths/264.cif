@@ -1,0 +1,40 @@
+# generated using pymatgen
+data_Co(RhO2)2
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   6.10408435
+_cell_length_b   6.10406273
+_cell_length_c   6.10407750
+_cell_angle_alpha   60.00007886
+_cell_angle_beta   59.99977744
+_cell_angle_gamma   59.99990916
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   Co(RhO2)2
+_chemical_formula_sum   'Co2 Rh4 O8'
+_cell_volume   160.82138058
+_cell_formula_units_Z   2
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Co  Co0  1  0.125001  0.124999  0.124999  1
+  Co  Co1  1  0.874999  0.875000  0.875000  1
+  Rh  Rh2  1  0.500078  0.500076  -0.000229  1
+  Rh  Rh3  1  0.500075  -0.000227  0.500076  1
+  Rh  Rh4  1  0.500077  0.500077  0.500078  1
+  Rh  Rh5  1  -0.000228  0.500076  0.500075  1
+  O  O6  1  0.740208  0.740205  0.740206  1
+  O  O7  1  0.740207  0.279380  0.740205  1
+  O  O8  1  0.740204  0.740209  0.279380  1
+  O  O9  1  0.259830  0.259829  0.720508  1
+  O  O10  1  0.259832  0.259831  0.259830  1
+  O  O11  1  0.279379  0.740206  0.740209  1
+  O  O12  1  0.259831  0.720508  0.259832  1
+  O  O13  1  0.720508  0.259832  0.259831  1

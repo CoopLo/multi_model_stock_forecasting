@@ -1,0 +1,55 @@
+# generated using pymatgen
+data_Nd2Zr8O19
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   3.58499262
+_cell_length_b   36.89539917
+_cell_length_c   35.16839196
+_cell_angle_alpha   5.23934531
+_cell_angle_beta   59.32740827
+_cell_angle_gamma   60.90536997
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   Nd2Zr8O19
+_chemical_formula_sum   'Nd2 Zr8 O19'
+_cell_volume   351.06607561
+_cell_formula_units_Z   1
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Nd  Nd0  1  0.045825  0.033375  0.958160  1
+  Nd  Nd1  1  0.934552  0.045303  0.067469  1
+  Zr  Zr2  1  0.939871  0.146700  0.065590  1
+  Zr  Zr3  1  0.968466  0.369496  0.037122  1
+  Zr  Zr4  1  0.953013  0.258167  0.051291  1
+  Zr  Zr5  1  0.982767  0.481986  0.021543  1
+  Zr  Zr6  1  0.013396  0.706211  0.991751  1
+  Zr  Zr7  1  0.996960  0.594476  0.006073  1
+  Zr  Zr8  1  0.026285  0.818501  0.976871  1
+  Zr  Zr9  1  0.040809  0.928973  0.963773  1
+  O  O10  1  0.226265  0.976854  0.277920  1
+  O  O11  1  0.206057  0.062161  0.296287  1
+  O  O12  1  0.237479  0.185999  0.266479  1
+  O  O13  1  0.251435  0.297200  0.252559  1
+  O  O14  1  0.256514  0.401398  0.247627  1
+  O  O15  1  0.290755  0.529655  0.212790  1
+  O  O16  1  0.277406  0.619110  0.226121  1
+  O  O17  1  0.814586  0.148544  0.689308  1
+  O  O18  1  0.322303  0.754440  0.181902  1
+  O  O19  1  0.801321  0.237878  0.702632  1
+  O  O20  1  0.785925  0.329296  0.713228  1
+  O  O21  1  0.160558  0.826455  0.340926  1
+  O  O22  1  0.727218  0.379979  0.774054  1
+  O  O23  1  0.694968  0.451969  0.809024  1
+  O  O24  1  0.736590  0.586619  0.765713  1
+  O  O25  1  0.738338  0.686530  0.765809  1
+  O  O26  1  0.756531  0.800695  0.748155  1
+  O  O27  1  0.780610  0.919519  0.724869  1
+  O  O28  1  0.776961  0.017904  0.727393  1

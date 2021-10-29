@@ -1,0 +1,55 @@
+# generated using pymatgen
+data_Sm2Zr8O19
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   3.57879629
+_cell_length_b   36.73501411
+_cell_length_c   35.01411801
+_cell_angle_alpha   5.24100323
+_cell_angle_beta   59.27116958
+_cell_angle_gamma   60.85388457
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   Sm2Zr8O19
+_chemical_formula_sum   'Sm2 Zr8 O19'
+_cell_volume   347.23271274
+_cell_formula_units_Z   1
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Sm  Sm0  1  0.041664  0.835854  0.955679  1
+  Sm  Sm1  1  0.953243  0.860218  0.049668  1
+  Zr  Zr2  1  0.956730  0.962426  0.046769  1
+  Zr  Zr3  1  0.965134  0.068973  0.038589  1
+  Zr  Zr4  1  0.973426  0.176110  0.029681  1
+  Zr  Zr5  1  0.985867  0.287539  0.015720  1
+  Zr  Zr6  1  0.998564  0.398064  0.002664  1
+  Zr  Zr7  1  0.009507  0.508566  0.989745  1
+  Zr  Zr8  1  0.021792  0.617459  0.978569  1
+  Zr  Zr9  1  0.029120  0.726127  0.967852  1
+  O  O10  1  0.250448  0.998636  0.251710  1
+  O  O11  1  0.240322  0.091563  0.260751  1
+  O  O12  1  0.259713  0.208063  0.240312  1
+  O  O13  1  0.277002  0.322704  0.222066  1
+  O  O14  1  0.265158  0.415960  0.230529  1
+  O  O15  1  0.306164  0.548140  0.190353  1
+  O  O16  1  0.786797  0.129334  0.713799  1
+  O  O17  1  0.175179  0.637097  0.328480  1
+  O  O18  1  0.248099  0.795607  0.255334  1
+  O  O19  1  0.752584  0.199006  0.751135  1
+  O  O20  1  0.696415  0.254447  0.806777  1
+  O  O21  1  0.201889  0.859650  0.300271  1
+  O  O22  1  0.753374  0.400851  0.748747  1
+  O  O23  1  0.729586  0.481830  0.772675  1
+  O  O24  1  0.763497  0.610063  0.737574  1
+  O  O25  1  0.767998  0.714860  0.731774  1
+  O  O26  1  0.772714  0.819826  0.725646  1
+  O  O27  1  0.797095  0.942059  0.697874  1
+  O  O28  1  0.786671  0.032242  0.710231  1

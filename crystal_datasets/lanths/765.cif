@@ -1,0 +1,32 @@
+# generated using pymatgen
+data_EuCd2
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   5.10837432
+_cell_length_b   6.32780657
+_cell_length_c   6.32780660
+_cell_angle_alpha   77.27598322
+_cell_angle_beta   66.19376213
+_cell_angle_gamma   66.19376179
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   EuCd2
+_chemical_formula_sum   'Eu2 Cd4'
+_cell_volume   170.81675381
+_cell_formula_units_Z   2
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Eu  Eu0  1  0.048908  0.201092  0.701092  1
+  Eu  Eu1  1  0.951092  0.798908  0.298908  1
+  Cd  Cd2  1  0.335007  0.221050  0.108936  1
+  Cd  Cd3  1  0.664993  0.391064  0.278950  1
+  Cd  Cd4  1  0.664993  0.778950  0.891064  1
+  Cd  Cd5  1  0.335007  0.608936  0.721050  1

@@ -1,0 +1,55 @@
+# generated using pymatgen
+data_Ho2Zr8O19
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   3.63841988
+_cell_length_b   36.35895108
+_cell_length_c   34.68184499
+_cell_angle_alpha   5.21149482
+_cell_angle_beta   58.36254559
+_cell_angle_gamma   59.97701646
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   Ho2Zr8O19
+_chemical_formula_sum   'Ho2 Zr8 O19'
+_cell_volume   340.11050928
+_cell_formula_units_Z   1
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Ho  Ho0  1  0.031151  0.024920  0.968849  1
+  Ho  Ho1  1  0.968849  0.075080  0.031151  1
+  Zr  Zr2  1  0.988543  0.190834  0.011457  1
+  Zr  Zr3  1  0.991903  0.293522  0.008097  1
+  Zr  Zr4  1  0.995154  0.396123  0.004846  1
+  Zr  Zr5  1  0.998290  0.498632  0.001710  1
+  Zr  Zr6  1  0.001710  0.601368  0.998290  1
+  Zr  Zr7  1  0.004846  0.703877  0.995154  1
+  Zr  Zr8  1  0.008097  0.806478  0.991903  1
+  Zr  Zr9  1  0.011457  0.909166  0.988543  1
+  O  O10  1  0.267005  0.013604  0.232995  1
+  O  O11  1  0.223903  0.079122  0.276097  1
+  O  O12  1  0.258580  0.206864  0.241420  1
+  O  O13  1  0.250000  0.300000  0.250000  1
+  O  O14  1  0.241420  0.393136  0.258580  1
+  O  O15  1  0.276097  0.520878  0.223903  1
+  O  O16  1  0.232995  0.586396  0.267005  1
+  O  O17  1  0.786172  0.128937  0.713828  1
+  O  O18  1  0.292667  0.734133  0.207333  1
+  O  O19  1  0.734525  0.187620  0.765475  1
+  O  O20  1  0.750000  0.300000  0.750000  1
+  O  O21  1  0.207333  0.865867  0.292667  1
+  O  O22  1  0.765475  0.412380  0.734525  1
+  O  O23  1  0.713828  0.471063  0.786172  1
+  O  O24  1  0.764239  0.611391  0.735761  1
+  O  O25  1  0.736164  0.688931  0.763836  1
+  O  O26  1  0.750000  0.800000  0.750000  1
+  O  O27  1  0.763836  0.911069  0.736164  1
+  O  O28  1  0.735761  0.988609  0.764239  1

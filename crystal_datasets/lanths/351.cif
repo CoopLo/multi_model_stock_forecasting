@@ -1,0 +1,38 @@
+# generated using pymatgen
+data_Cr3CuO8
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   5.03004102
+_cell_length_b   5.03008107
+_cell_length_c   6.60719915
+_cell_angle_alpha   86.44649153
+_cell_angle_beta   86.44551695
+_cell_angle_gamma   67.12934732
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   Cr3CuO8
+_chemical_formula_sum   'Cr3 Cu1 O8'
+_cell_volume   153.60301687
+_cell_formula_units_Z   1
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Cr  Cr0  1  0.346701  0.346695  0.731899  1
+  Cr  Cr1  1  0.653349  0.653367  0.267933  1
+  Cr  Cr2  1  0.999995  0.999982  0.500010  1
+  Cu  Cu3  1  0.999878  0.999989  1.000063  1
+  O  O4  1  0.791769  0.282598  0.275073  1
+  O  O5  1  0.227866  0.227853  0.941334  1
+  O  O6  1  0.282627  0.791750  0.275069  1
+  O  O7  1  0.767159  0.767146  0.463218  1
+  O  O8  1  0.717422  0.208182  0.724966  1
+  O  O9  1  0.232820  0.232815  0.536812  1
+  O  O10  1  0.208185  0.717419  0.724973  1
+  O  O11  1  0.772227  0.772207  0.058648  1
